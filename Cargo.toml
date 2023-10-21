@@ -13,3 +13,6 @@ regex = { version = "1.10.2" }
 lazy_static = { version = "1.4.0" }
 clap = { version = "4.4.6" }
 rpassword = { version = "7.2.0" }
+directories = { version = "5.0.1" }
+serde = { version = "1.0.189", features = ["derive"] }
+serde_json = { version = "1.0.107" }
