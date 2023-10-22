@@ -70,16 +70,16 @@ impl BoursoWebClient {
             store.insert(
                 Cookie::parse( // Necessary cookie to remove the domain migration error
                     "brsDomainMigration=migrated;",
-                    &reqwest::Url::parse(&format!("{BASE_URL}/connexion/")).unwrap()).unwrap(),
-                &reqwest::Url::parse(&format!("{BASE_URL}/connexion/")).unwrap(),
+                    &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap()).unwrap(),
+                &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap(),
             )?;
             store.insert(
                 Cookie::parse( // Necessary cookie to access the virtual pad
-                    format!("__brs_mit={};", extract_brs_mit_cookie(&init_res)?),
-                    &reqwest::Url::parse(&format!("{BASE_URL}/connexion/")).unwrap()).unwrap(),
-                &reqwest::Url::parse(&format!("{BASE_URL}/connexion/")).unwrap(),
+                    format!("__brs_mit={};", self.brs_mit_cookie),
+                    &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap()).unwrap(),
+                &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap(),
             )?;
-        } 
+        }
 
         let res = self.client // TODO: rm duplicate code from above
             .get(format!("{BASE_URL}/connexion/"))
@@ -143,7 +143,19 @@ impl BoursoWebClient {
             bail!("Could not login to Bourso website, status code: {}", res.status());
         }
 
-        println!("{}", res.text().await?);
+        let res = self.client
+            .get(format!("{BASE_URL}/"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if res.contains(r#"href="/se-deconnecter""#) {
+            println!("You are now logged in!");
+        } else {
+            bail!("Could not login to Bourso website");
+        }
 
         Ok(())
     }
