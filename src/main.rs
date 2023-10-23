@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         .subcommand(
             Command::new("accounts")
                 .about("Manage your saving accounts")
-
+                // args: bank|saving|trading|default: all accounts
         )
         .subcommand(
             Command::new("config")
@@ -35,14 +35,9 @@ async fn main() -> Result<()> {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("accounts", _)) => {
-            println!("accounts");
-        }
-        Some(("transactions", _)) => {
+        // These matches require authentication
+        Some(("accounts", _)) | Some(("transactions", _)) | Some(("balance", _)) => {
             println!("transactions");
-        }
-        Some(("balance", _)) => {
-            println!("login");
         }
         Some(("config", config_matches)) => {
             let customer_id = config_matches.get_one::<String>("username").map(|s| s.as_str()).unwrap();
@@ -70,6 +65,14 @@ async fn main() -> Result<()> {
     let mut web_client: bourso::client::BoursoWebClient = bourso::get_client();
     web_client.init_session().await?;
     web_client.login(&customer_id, &password).await?;
+
+    match matches.subcommand() {
+        Some(("accounts", _)) => {
+            let accounts = web_client.get_accounts(None).await?;
+            println!("{:#?}", accounts);
+        }
+        _ => unreachable!(),
+    }
 
     Ok(())
 }
