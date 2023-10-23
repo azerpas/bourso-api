@@ -19,7 +19,24 @@ async fn main() -> Result<()> {
         .subcommand(
             Command::new("accounts")
                 .about("Manage your saving accounts")
-                // args: bank|saving|trading|default: all accounts
+                .arg(
+                    Arg::new("bank")
+                        .short('b')
+                        .long("banking")
+                        .help("List all your base banking accounts")
+                )
+                .arg(
+                    Arg::new("saving")
+                        .short('s')
+                        .long("saving")
+                        .help("List all your saving accounts")
+                )
+                .arg(
+                    Arg::new("trading")
+                        .short('t')
+                        .long("trading")
+                        .help("List all your trading accounts")
+                )
         )
         .subcommand(
             Command::new("config")
@@ -66,13 +83,24 @@ async fn main() -> Result<()> {
     web_client.init_session().await?;
     web_client.login(&customer_id, &password).await?;
 
+    let mut accounts: Vec<bourso::Account> = vec![];
+
     match matches.subcommand() {
-        Some(("accounts", _)) => {
-            let accounts = web_client.get_accounts(None).await?;
-            println!("{:#?}", accounts);
+        Some(("accounts", sub_matches)) => {
+            if sub_matches.contains_id("bank") {
+                accounts = web_client.get_accounts(Some(bourso::AccountKind::Banking)).await?;
+            } else if sub_matches.contains_id("saving") {
+                accounts = web_client.get_accounts(Some(bourso::AccountKind::Savings)).await?;
+            } else if sub_matches.contains_id("trading") {
+                accounts = web_client.get_accounts(Some(bourso::AccountKind::Trading)).await?;
+            } else {
+                accounts = web_client.get_accounts(None).await?;
+            }
         }
         _ => unreachable!(),
     }
+
+    println!("{:#?}", accounts);
 
     Ok(())
 }
