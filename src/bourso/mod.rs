@@ -3,7 +3,7 @@ pub mod client;
 pub mod virtual_pad;
 
 /// Type of account
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccountKind {
     Banking,
     Savings,

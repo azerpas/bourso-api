@@ -5,7 +5,7 @@ use regex::Regex;
 use cookie_store::Cookie;
 use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
 
-use super::{virtual_pad, constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL}, Account, AccountKind};
+use super::{virtual_pad, constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN}, Account, AccountKind};
 
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
@@ -228,12 +228,15 @@ impl BoursoWebClient {
             .await?;
 
         let accounts = match kind {
-            Some(AccountKind::Savings) => extract_savings_accounts(&res)?,
+            Some(AccountKind::Savings) => extract_accounts(&res, AccountKind::Savings)?,
+            Some(AccountKind::Banking) => extract_accounts(&res, AccountKind::Banking)?,
+            Some(AccountKind::Trading) => extract_accounts(&res, AccountKind::Trading)?,
             // all accounts
             _ => {
                 [
-                    extract_savings_accounts(&res)?
-                    // TODO: other type of accounts
+                    extract_accounts(&res, AccountKind::Savings)?,
+                    extract_accounts(&res, AccountKind::Banking)?,
+                    extract_accounts(&res, AccountKind::Trading)?,
                 ].concat()
             },
         };
@@ -326,9 +329,15 @@ fn extract_token(res: &str) -> Result<String> {
     Ok(token.as_str().trim().to_string())
 }
 
-fn extract_savings_accounts(res: &str) -> Result<Vec<Account>> {
-    let savings_regex = Regex::new(SAVINGS_PATTERN)?;
-    let savings_accounts = savings_regex
+fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
+    let regex = Regex::new(
+        match kind {
+            AccountKind::Savings => SAVINGS_PATTERN,
+            AccountKind::Banking => BANKING_PATTERN,
+            AccountKind::Trading => TRADING_PATTERN,
+        }
+    )?;
+    let accounts_ul = regex
         .captures(&res)
         .unwrap()
         .get(1)
@@ -338,14 +347,17 @@ fn extract_savings_accounts(res: &str) -> Result<Vec<Account>> {
     let account_regex = Regex::new(ACCOUNT_PATTERN)?;
 
     let accounts = account_regex
-        .captures_iter(&savings_accounts)
+        .captures_iter(&accounts_ul)
         .map(|m| {
             Account {
                 name: m.name("name")
-                    .unwrap().as_str()
-                    .trim().to_string(),
+                    .unwrap()
+                    .as_str()
+                    .trim()
+                    .to_string(),
                 balance: m.name("balance")
-                    .unwrap().as_str()
+                    .unwrap()
+                    .as_str()
                     .trim()
                     .replace(" ", "")
                     .replace(",", "")
@@ -353,9 +365,11 @@ fn extract_savings_accounts(res: &str) -> Result<Vec<Account>> {
                     .parse::<usize>()
                     .unwrap(),
                 bank_name: m.name("bank_name")
-                    .unwrap().as_str()
-                    .trim().to_string(),
-                kind: AccountKind::Savings,
+                    .unwrap()
+                    .as_str()
+                    .trim()
+                    .to_string(),
+                kind: kind,
             }
         })
         .collect::<Vec<Account>>();
@@ -416,8 +430,8 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_savings_accounts() {
-        let accounts = extract_savings_accounts(ACCOUNTS_RES).unwrap();
+    fn test_extract_accounts() {
+        let accounts = extract_accounts(ACCOUNTS_RES, AccountKind::Savings).unwrap();
         assert_eq!(accounts.len(), 2);
         assert_eq!(accounts[0].name, "LIVRET DEVELOPPEMENT DURABLE SOLIDAIRE");
         assert_eq!(accounts[0].balance, 1101000);
@@ -425,6 +439,14 @@ mod tests {
         assert_eq!(accounts[1].name, "Livret Jeune");
         assert_eq!(accounts[1].balance, 159972);
         assert_eq!(accounts[1].bank_name, "Crédit Agricole");
+        let accounts = extract_accounts(ACCOUNTS_RES, AccountKind::Banking).unwrap();
+        //assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].name, "BoursoBank");
+        assert_eq!(accounts[0].balance, 2081050);
+        assert_eq!(accounts[0].bank_name, "BoursoBank");
+        assert_eq!(accounts[1].name, "Compte de chèques ****0102");
+        assert_eq!(accounts[1].balance, 50040);
+        assert_eq!(accounts[1].bank_name, "CIC");
     }
 
     const VIRTUAL_PAD_RES: &str = r#"<div class="login-matrix">
