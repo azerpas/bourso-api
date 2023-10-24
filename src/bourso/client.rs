@@ -5,7 +5,7 @@ use regex::Regex;
 use cookie_store::Cookie;
 use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
 
-use super::{virtual_pad, constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN}, Account, AccountKind};
+use super::{virtual_pad, constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN}, Account, AccountKind};
 
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
@@ -231,12 +231,14 @@ impl BoursoWebClient {
             Some(AccountKind::Savings) => extract_accounts(&res, AccountKind::Savings)?,
             Some(AccountKind::Banking) => extract_accounts(&res, AccountKind::Banking)?,
             Some(AccountKind::Trading) => extract_accounts(&res, AccountKind::Trading)?,
+            Some(AccountKind::Loans) => extract_accounts(&res, AccountKind::Loans)?,
             // all accounts
             _ => {
                 [
                     extract_accounts(&res, AccountKind::Savings)?,
                     extract_accounts(&res, AccountKind::Banking)?,
                     extract_accounts(&res, AccountKind::Trading)?,
+                    extract_accounts(&res, AccountKind::Loans)?,
                 ].concat()
             },
         };
@@ -335,6 +337,7 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
             AccountKind::Savings => SAVINGS_PATTERN,
             AccountKind::Banking => BANKING_PATTERN,
             AccountKind::Trading => TRADING_PATTERN,
+            AccountKind::Loans => LOANS_PATTERN,
         }
     )?;
     let accounts_ul = regex
@@ -350,6 +353,11 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
         .captures_iter(&accounts_ul)
         .map(|m| {
             Account {
+                id: m.name("id")
+                    .unwrap()
+                    .as_str()
+                    .trim()
+                    .to_string(),
                 name: m.name("name")
                     .unwrap()
                     .as_str()
@@ -362,7 +370,8 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
                     .replace(" ", "")
                     .replace(",", "")
                     .replace("\u{a0}", "")
-                    .parse::<usize>()
+                    .replace("−", "-")
+                    .parse::<isize>()
                     .unwrap(),
                 bank_name: m.name("bank_name")
                     .unwrap()
@@ -436,17 +445,27 @@ mod tests {
         assert_eq!(accounts[0].name, "LIVRET DEVELOPPEMENT DURABLE SOLIDAIRE");
         assert_eq!(accounts[0].balance, 1101000);
         assert_eq!(accounts[0].bank_name, "BoursoBank");
+        assert_eq!(accounts[1].id, "d4e4fd4067b6d4d0b538a15e42238ef9");
         assert_eq!(accounts[1].name, "Livret Jeune");
         assert_eq!(accounts[1].balance, 159972);
         assert_eq!(accounts[1].bank_name, "Crédit Agricole");
         let accounts = extract_accounts(ACCOUNTS_RES, AccountKind::Banking).unwrap();
-        //assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].id, "e2f509c466f5294f15abd873dbbf8a62");
         assert_eq!(accounts[0].name, "BoursoBank");
         assert_eq!(accounts[0].balance, 2081050);
         assert_eq!(accounts[0].bank_name, "BoursoBank");
         assert_eq!(accounts[1].name, "Compte de chèques ****0102");
         assert_eq!(accounts[1].balance, 50040);
         assert_eq!(accounts[1].bank_name, "CIC");
+        let accounts = extract_accounts(ACCOUNTS_RES, AccountKind::Trading).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "PEA DOE");
+        let accounts = extract_accounts(ACCOUNTS_RES, AccountKind::Loans).unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].name, "Prêt personnel");
+        assert_eq!(accounts[0].balance, -9495982);
+        assert_eq!(accounts[0].bank_name, "Crédit Agricole");
     }
 
     const VIRTUAL_PAD_RES: &str = r#"<div class="login-matrix">
@@ -604,13 +623,13 @@ mod tests {
             <ul class="c-info-box " aria-label="Mon compte bancaire - Total : 21 310,90 €" role="list"
                 data-brs-list-header data-summary-bank>
                 <li class="c-panel__item c-info-box__item" data-brs-filterable>
-                    <a class="c-info-box__link-wrapper" href="/compte/cav/XXXXXXXX001/"
+                    <a class="c-info-box__link-wrapper" href="/compte/cav/e2f509c466f5294f15abd873dbbf8a62/"
                         data-tag-commander-click='{"label": "application::customer.dashboard::click_accounts_cav", "s2": 1, "type": "N"}'
                         aria-label="Détails du compte BoursoBank - Solde : 20 810,50 €" title="BoursoBank">
 
                         <span class="c-info-box__account">
                             <span class="c-info-box__account-label"
-                                data-account-label="XXXXXXXX001" data-brs-list-item-label>
+                                data-account-label="e2f509c466f5294f15abd873dbbf8a62" data-brs-list-item-label>
                                 BoursoBank
                             </span>
                             <span class="c-info-box__account-balance c-info-box__account-balance--positive">
@@ -637,14 +656,14 @@ mod tests {
                     </a>
                 </li>
                 <li class="c-panel__item c-info-box__item" data-brs-filterable>
-                    <a class="c-info-box__link-wrapper" href="/budget/compte/XXXXXXXX002/"
+                    <a class="c-info-box__link-wrapper" href="/budget/compte/a22217240487004d13c8a6b5da422bbf/"
                         data-tag-commander-click='{"label": "application::customer.dashboard::click_accounts_pfm_cav", "s2": 1, "type": "N"}'
                         aria-label="Détails du compte Compte de chèques ****0102 - Solde : 500,40 €"
                         title="Compte de chèques ****0102">
 
                         <span class="c-info-box__account">
                             <span class="c-info-box__account-label"
-                                data-account-label="XXXXXXXX002" data-brs-list-item-label>
+                                data-account-label="a22217240487004d13c8a6b5da422bbf" data-brs-list-item-label>
                                 Compte de chèques ****0102
                             </span>
                             <span class="c-info-box__account-balance c-info-box__account-balance--positive">
@@ -677,14 +696,14 @@ mod tests {
             <ul class="c-info-box " aria-label="Mon épargne - Total : 12 609,72 €" role="list" data-brs-list-header
                 data-summary-savings>
                 <li class="c-panel__item c-info-box__item" data-brs-filterable>
-                    <a class="c-info-box__link-wrapper" href="/compte/epargne/ldd/XXXXXXXX003/"
+                    <a class="c-info-box__link-wrapper" href="/compte/epargne/ldd/a8a23172b7e7c91c538831578242112e/"
                         data-tag-commander-click='{"label": "application::customer.dashboard::click_accounts_saving", "s2": 1, "type": "N"}'
                         aria-label="Détails du compte LIVRET DEVELOPPEMENT DURABLE SOLIDAIRE - Solde : 11 010,00 €"
                         title="LIVRET DEVELOPPEMENT DURABLE SOLIDAIRE">
 
                         <span class="c-info-box__account">
                             <span class="c-info-box__account-label"
-                                data-account-label="XXXXXXXX003" data-brs-list-item-label>
+                                data-account-label="a8a23172b7e7c91c538831578242112e" data-brs-list-item-label>
                                 LIVRET DEVELOPPEMENT DURABLE SOLIDAIRE
                             </span>
                             <span class="c-info-box__account-balance c-info-box__account-balance--positive">
@@ -698,13 +717,13 @@ mod tests {
                     </a>
                 </li>
                 <li class="c-panel__item c-info-box__item" data-brs-filterable>
-                    <a class="c-info-box__link-wrapper" href="/budget/compte/XXXXXXXX004/"
+                    <a class="c-info-box__link-wrapper" href="/budget/compte/d4e4fd4067b6d4d0b538a15e42238ef9/"
                         data-tag-commander-click='{"label": "application::customer.dashboard::click_accounts_pfm_saving", "s2": 1, "type": "N"}'
                         aria-label="Détails du compte Livret Jeune - Solde : 1 599,72 €" title="Livret Jeune">
 
                         <span class="c-info-box__account">
                             <span class="c-info-box__account-label"
-                                data-account-label="XXXXXXXX004" data-brs-list-item-label>
+                                data-account-label="d4e4fd4067b6d4d0b538a15e42238ef9" data-brs-list-item-label>
                                 Livret Jeune
                             </span>
                             <span class="c-info-box__account-balance c-info-box__account-balance--positive">
@@ -737,13 +756,13 @@ mod tests {
             <ul class="c-info-box " aria-label="Mes placements financiers - Total : 143 088,89 €" role="list"
                 data-brs-list-header data-summary-trading>
                 <li class="c-panel__item c-info-box__item" data-brs-filterable>
-                    <a class="c-info-box__link-wrapper" href="/compte/pea/XXXXXXXX005/"
+                    <a class="c-info-box__link-wrapper" href="/compte/pea/9651d8edd5975de1b9eff3865505f15f/"
                         data-tag-commander-click='{"label": "application::customer.dashboard::click_accounts_investement", "s2": 1, "type": "N"}'
                         aria-label="Détails du compte PEA DOE - Solde : 143 088,89 €" title="PEA DOE">
 
                         <span class="c-info-box__account">
                             <span class="c-info-box__account-label"
-                                data-account-label="XXXXXXXX005" data-brs-list-item-label>
+                                data-account-label="9651d8edd5975de1b9eff3865505f15f" data-brs-list-item-label>
                                 PEA DOE
                             </span>
                             <span class="c-info-box__account-balance c-info-box__account-balance--positive">
@@ -776,13 +795,13 @@ mod tests {
             <ul class="c-info-box " aria-label="Mes crédits - Total : − 94 959,82 €" role="list" data-brs-list-header
                 data-summary-loan>
                 <li class="c-panel__item c-info-box__item" data-brs-filterable>
-                    <a class="c-info-box__link-wrapper" href="/budget/compte/XXXXXXXX006/"
+                    <a class="c-info-box__link-wrapper" href="/budget/compte/7315a57115ae889992ec98a6bb3571cb/"
                         data-tag-commander-click='{"label": "application::customer.dashboard::click_accounts_pfm_loan", "s2": 1, "type": "N"}'
                         aria-label="Détails du compte Prêt personnel - Solde : − 94 959,82 €" title="Prêt personnel">
 
                         <span class="c-info-box__account">
                             <span class="c-info-box__account-label"
-                                data-account-label="XXXXXXXX006" data-brs-list-item-label>
+                                data-account-label="7315a57115ae889992ec98a6bb3571cb" data-brs-list-item-label>
                                 Prêt personnel
                             </span>
                             <span class="c-info-box__account-balance c-info-box__account-balance--neutral">

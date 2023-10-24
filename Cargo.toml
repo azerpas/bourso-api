@@ -1,5 +1,5 @@
 [package]
-name = "boursobank-dca"
+name = "bourso"
 version = "0.1.0"
 edition = "2021"
 

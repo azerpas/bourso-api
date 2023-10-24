@@ -21,21 +21,23 @@ async fn main() -> Result<()> {
                 .about("Manage your saving accounts")
                 .arg(
                     Arg::new("bank")
-                        .short('b')
                         .long("banking")
                         .help("List all your base banking accounts")
                 )
                 .arg(
                     Arg::new("saving")
-                        .short('s')
                         .long("saving")
                         .help("List all your saving accounts")
                 )
                 .arg(
                     Arg::new("trading")
-                        .short('t')
                         .long("trading")
                         .help("List all your trading accounts")
+                )
+                .arg(
+                    Arg::new("loans")
+                        .long("loans")
+                        .help("List all your loans")
                 )
         )
         .subcommand(
@@ -47,6 +49,29 @@ async fn main() -> Result<()> {
                         .long("username")
                         .help("Your customer id")
                         .required(true)
+                )
+        )
+        // .subcommand( // interactive mode
+        .subcommand(
+            Command::new("trade")
+                .about("Trade on your trading accounts")
+                .subcommand(
+                    Command::new("list")
+                        .about("List all your current orders")
+                )
+                .subcommand(
+                    Command::new("buy")
+                        .about("Buy a stock")
+                )
+                .arg(
+                    Arg::new("account")
+                        .short('a')
+                        .long("account")
+                        .help(
+                            r#"The account to use by its 'name' (e.g: 'PEA') or 'id' (e.g: 'e51f635524a7d506e4d4a7a8088b6278').
+You can get these infos with the command `bourso accounts`"#
+                        )
+                        .default_value("PEA")
                 )
         )
         .get_matches();
@@ -93,6 +118,8 @@ async fn main() -> Result<()> {
                 accounts = web_client.get_accounts(Some(bourso::AccountKind::Savings)).await?;
             } else if sub_matches.contains_id("trading") {
                 accounts = web_client.get_accounts(Some(bourso::AccountKind::Trading)).await?;
+            } else if sub_matches.contains_id("loans") {
+                accounts = web_client.get_accounts(Some(bourso::AccountKind::Loans)).await?;
             } else {
                 accounts = web_client.get_accounts(None).await?;
             }
