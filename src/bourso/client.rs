@@ -5,7 +5,13 @@ use regex::Regex;
 use cookie_store::Cookie;
 use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
 
-use super::{virtual_pad, constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN}, Account, AccountKind};
+use super::{
+    virtual_pad, 
+    constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN}, 
+    Account, 
+    AccountKind,
+    config::{Config, extract_brs_config}
+};
 
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
@@ -26,6 +32,8 @@ pub struct BoursoWebClient {
     password: String,
     /// Cookie store used to store cookies between each request made by the client to the Bourso website.
     cookie_store: Arc<CookieStoreMutex>,
+    /// Bourso Web current configuration
+    config: Config,
 }
 
 impl BoursoWebClient {
@@ -46,6 +54,7 @@ impl BoursoWebClient {
             customer_id: String::new(),
             token: String::new(),
             password: String::new(),
+            config: Config::default(),
         }
     }
 
@@ -116,6 +125,8 @@ impl BoursoWebClient {
         let res = self.get_login_page().await?;
 
         self.token = extract_token(&res)?;
+        self.config = extract_brs_config(&res)?;
+        println!("Using version from {}", self.config.app_release_date);
 
         let res = self.client
             .get(format!("{BASE_URL}/connexion/clavier-virtuel?_hinclude=1"))
@@ -201,7 +212,9 @@ impl BoursoWebClient {
             .await?;
 
         if res.contains(r#"href="/se-deconnecter""#) {
-            println!("You are now logged in!");
+            // Update the config with user hash
+            self.config = extract_brs_config(&res)?;
+            println!("You are now logged in with user: {}", self.config.user_hash.as_ref().unwrap());
         } else {
             bail!("Could not login to Bourso website");
         }
