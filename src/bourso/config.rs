@@ -44,7 +44,7 @@ pub struct Config {
     #[serde(rename = "app_release_date")]
     pub app_release_date: String,
     #[serde(rename = "USER_HASH")]
-    pub user_hash: String,
+    pub user_hash: Option<String>,
     #[serde(rename = "JWT_TOKEN_ID")]
     pub jwt_token_id: String,
     #[serde(rename = "DEFAULT_API_BEARER")]
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(config.pjax_offset_duration, 350);
         assert_eq!(config.select_bar_autoclose_tooltip_timeout, 3000);
         assert_eq!(config.app_release_date, "2023-03-01T14:15:36+0100");
-        assert_eq!(config.user_hash, "61d55b52615fbdf");
+        assert_eq!(config.user_hash.unwrap(), "61d55b52615fbdf");
         assert_eq!(config.application_name, "web_fr_front_20");
         assert_eq!(config.marketing_name, "BoursoBank");
         assert_eq!(config.webauth.prepare_path, "/webauthn/authentification/preparation");
