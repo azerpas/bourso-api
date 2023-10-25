@@ -1,6 +1,7 @@
 pub mod constants;
 pub mod client;
 pub mod virtual_pad;
+pub mod config;
 
 /// Type of account
 #[derive(Debug, Clone, Copy, PartialEq)]
