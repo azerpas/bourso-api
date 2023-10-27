@@ -5,6 +5,13 @@ mod bourso;
 mod settings;
 
 use settings::{Settings, get_settings, save_settings};
+use bourso::{
+    account::{
+        Account, 
+        AccountKind
+    },
+    client::BoursoWebClient 
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -104,22 +111,22 @@ You can get these infos with the command `bourso accounts`"#
         .trim()
         .to_string();
 
-    let mut web_client: bourso::client::BoursoWebClient = bourso::get_client();
+    let mut web_client: BoursoWebClient = bourso::get_client();
     web_client.init_session().await?;
     web_client.login(&customer_id, &password).await?;
 
-    let mut accounts: Vec<bourso::Account> = vec![];
+    let mut accounts: Vec<Account> = vec![];
 
     match matches.subcommand() {
         Some(("accounts", sub_matches)) => {
             if sub_matches.contains_id("bank") {
-                accounts = web_client.get_accounts(Some(bourso::AccountKind::Banking)).await?;
+                accounts = web_client.get_accounts(Some(AccountKind::Banking)).await?;
             } else if sub_matches.contains_id("saving") {
-                accounts = web_client.get_accounts(Some(bourso::AccountKind::Savings)).await?;
+                accounts = web_client.get_accounts(Some(AccountKind::Savings)).await?;
             } else if sub_matches.contains_id("trading") {
-                accounts = web_client.get_accounts(Some(bourso::AccountKind::Trading)).await?;
+                accounts = web_client.get_accounts(Some(AccountKind::Trading)).await?;
             } else if sub_matches.contains_id("loans") {
-                accounts = web_client.get_accounts(Some(bourso::AccountKind::Loans)).await?;
+                accounts = web_client.get_accounts(Some(AccountKind::Loans)).await?;
             } else {
                 accounts = web_client.get_accounts(None).await?;
             }
