@@ -1,5 +1,7 @@
 pub mod account;
+pub mod config;
 pub mod trade;
+pub mod virtual_pad;
 
 use std::sync::Arc;
 
@@ -9,11 +11,12 @@ use cookie_store::Cookie;
 use reqwest::Response;
 use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
 
+
+use self::config::{Config, extract_brs_config};
+
 use super::{
-    virtual_pad, 
     constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN}, 
     account::{Account, AccountKind},
-    config::{Config, extract_brs_config}
 };
 
 pub struct BoursoWebClient {
