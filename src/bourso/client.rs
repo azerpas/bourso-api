@@ -217,7 +217,16 @@ impl BoursoWebClient {
 
         None
     }
-
+    
+    /// Performs strong authentication verification.
+    ///
+    /// This method handles the verification process by communicating with the server,
+    /// awaiting user input, and validating the authentication status. If the user is successfully
+    /// verified via the app, it returns `true`. If not, it returns `false`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating whether the strong authentication was successful.
     pub async fn handle_strong_auth_verification(&mut self) -> Result<bool> {
         log_with_timestamp(format!("Initiating strong authentication verification.").blue());
         let res = self
