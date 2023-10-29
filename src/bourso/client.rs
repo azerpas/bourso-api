@@ -6,8 +6,10 @@ use super::{
         ACCOUNT_PATTERN, BANKING_PATTERN, BASE_URL, LOANS_PATTERN, SAVINGS_PATTERN, TRADING_PATTERN,
     },
     virtual_pad, Account, AccountKind,
+    utils::{log_with_timestamp}
 };
 use anyhow::{bail, Context, Result};
+use colored::*;
 use cookie_store::Cookie;
 use regex::Regex;
 use reqwest::Method;
@@ -133,7 +135,7 @@ impl BoursoWebClient {
 
         self.token = extract_token(&res)?;
         self.config = extract_brs_config(&res)?;
-        println!("Using version from {}", self.config.app_release_date);
+        log_with_timestamp(format!("Using version from {}", self.config.app_release_date).blue());
 
         let res = self
             .client
@@ -217,6 +219,7 @@ impl BoursoWebClient {
     }
 
     pub async fn handle_strong_auth_verification(&mut self) -> Result<bool> {
+        log_with_timestamp(format!("Initiating strong authentication verification.").blue());
         let res = self
             .client
             .get(format!("{BASE_URL}/securisation"))
@@ -226,7 +229,12 @@ impl BoursoWebClient {
             .text()
             .await?;
         self.config = extract_brs_config(&res)?;
-
+        if let Some(config) = &self.config.user_hash {
+            log_with_timestamp(format!("Retrieved user hash: `{}`", config).blue());
+        } else {
+            log_with_timestamp(format!("User hash not found in config during strong authentication.").red());
+            bail!("Strong authentication failed: User hash not found.");
+        }
         let res = self
             .client
             .get(format!("{BASE_URL}/securisation/validation"))
@@ -242,7 +250,7 @@ impl BoursoWebClient {
         self.client
         .request(Method::OPTIONS, format!(
             "
-            https://api.boursobank.com/services/api/v1.7/_user_/{}/session/challenge/checkwebtoapp/10305",
+            https://api.boursobank.com/services/api/v1.7/_user_/_{}_/session/challenge/checkwebtoapp/10305",
             self.config.user_hash.as_mut().unwrap()
         ))
         .headers(self.get_headers())
@@ -260,7 +268,7 @@ impl BoursoWebClient {
                 .unwrap(),
         );
         // Send strong auth verification to app
-        self.client.post(format!("https://api.boursobank.com/services/api/v1.7/_user_/{}/session/challenge/startwebtoapp/10305", 
+        self.client.post(format!("https://api.boursobank.com/services/api/v1.7/_user_/_{}_/session/challenge/startwebtoapp/10305", 
             self.config.user_hash.as_mut().unwrap())
         )
             .headers(headers.clone())
@@ -269,8 +277,12 @@ impl BoursoWebClient {
             .await?
             .text()
             .await?;
+
+        log_with_timestamp(format!("Strong authentication: Sending request to app").blue());
+
         // Await for user to press enter
-        println!("Click 'Enter' after the app verification is complete.");
+        log_with_timestamp(format!("Click 'Enter' after the app verification is complete.").yellow());
+
         io::stdin()
             .read_line(&mut String::new())
             .expect("Erreur lors de la lecture de l'entrée");
@@ -313,6 +325,7 @@ impl BoursoWebClient {
     ///
     /// Nothing if the login was successful, an error otherwise.
     pub async fn login(&mut self, customer_id: &str, password: &str) -> Result<()> {
+        log_with_timestamp(format!("Attempting to login user: `{}`", customer_id).blue());
         self.customer_id = customer_id.to_string();
         self.password = password.to_string();
         let data = reqwest::multipart::Form::new()
@@ -339,6 +352,12 @@ impl BoursoWebClient {
             .await?;
 
         if res.status() != 302 {
+            log_with_timestamp(
+                format!(
+                "Login failed for user `{}`, status code: {}",
+                customer_id,
+                res.status()).red()
+            );
             bail!(
                 "Could not login to Bourso website, status code: {}",
                 res.status()
@@ -357,13 +376,26 @@ impl BoursoWebClient {
         if res.contains(r#"href="/se-deconnecter""#) {
             // Update the config with user hash
             self.config = extract_brs_config(&res)?;
-            println!(
-                "You are now logged in with user: {}",
-                self.config.user_hash.as_ref().unwrap()
-            );
+            log_with_timestamp(format!("User `{}` logged in successfully.", customer_id).green());
         } else if res.contains(r#"href="/securisation""#) {
-            self.handle_strong_auth_verification().await?;
+            log_with_timestamp(format!("User `{}` requires strong authentication.", customer_id).yellow());
+            match self.handle_strong_auth_verification().await {
+                Ok(true) => {
+                    log_with_timestamp(format!("Strong authentication verified successfully.").green());
+                    log_with_timestamp(format!("User `{}` requires strong authentication.", customer_id).green());
+                }
+                Ok(false) => {
+                    log_with_timestamp(format!("Strong authentication verification failed or incomplete.").red());
+                    return Err("Strong authentication verification failed or incomplete.".into());
+                }
+                Err(e) => {
+                    log_with_timestamp(format!("An error occurred during strong authentication verification: {}",
+                    e).red());
+                }
+            }
         } else {
+            log_with_timestamp(format!("Login failed for user {}, could not confirm login on Bourso website",
+            customer_id).red());
             bail!("Could not login to Bourso website");
         }
 

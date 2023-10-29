@@ -1,6 +1,7 @@
 pub mod constants;
 pub mod client;
 pub mod virtual_pad;
+pub mod utils;
 pub mod config;
 
 /// Type of account
