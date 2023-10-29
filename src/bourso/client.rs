@@ -1,28 +1,29 @@
-use std::sync::Arc;
-
-use anyhow::{Result, Context, bail};
-use regex::Regex;
-use cookie_store::Cookie;
-use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
+use std::{io, sync::Arc};
 
 use super::{
-    virtual_pad, 
-    constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN}, 
-    Account, 
-    AccountKind,
-    config::{Config, extract_brs_config}
+    config::{extract_brs_config, Config},
+    constants::{
+        ACCOUNT_PATTERN, BANKING_PATTERN, BASE_URL, LOANS_PATTERN, SAVINGS_PATTERN, TRADING_PATTERN,
+    },
+    virtual_pad, Account, AccountKind,
 };
-
+use anyhow::{bail, Context, Result};
+use cookie_store::Cookie;
+use regex::Regex;
+use reqwest::Method;
+use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+use scraper::{Html, Selector};
+use serde_json::Value;
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
     client: reqwest::Client,
-    /// __brs_mit cookie is a cookie that is necessary to access login page. 
+    /// __brs_mit cookie is a cookie that is necessary to access login page.
     /// Bourso website sets it when you access the login page for the first time before refreshing the page.
     brs_mit_cookie: String,
     /// Virtual pad IDs are the IDs of the virtual pad keys. They are used to translate the password
     virtual_pad_ids: Vec<String>,
     /// Challenge ID is a token retrieved from the virtual pad page. It represents a random string
-    /// that corresponds to the used virtual pad keys layout. 
+    /// that corresponds to the used virtual pad keys layout.
     challenge_id: String,
     /// Customer ID used to login.
     customer_id: String,
@@ -46,7 +47,8 @@ impl BoursoWebClient {
             client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .cookie_provider(Arc::clone(&cookie_store))
-                .build().unwrap(),
+                .build()
+                .unwrap(),
             cookie_store: cookie_store,
             brs_mit_cookie: String::new(),
             virtual_pad_ids: Default::default(),
@@ -59,9 +61,9 @@ impl BoursoWebClient {
     }
 
     /// Get the headers needed to make requests to the Bourso website.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The headers as a `reqwest::header::HeaderMap`.
     fn get_headers(&self) -> reqwest::header::HeaderMap {
         let mut headers = reqwest::header::HeaderMap::new();
@@ -69,33 +71,32 @@ impl BoursoWebClient {
             "user-agent", 
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36".parse().unwrap(),
         );
-        
+
         headers
     }
 
     /// Get the login page content as a string.
-    /// 
+    ///
     /// We're forced to call this page at least two times to retrieve the `__brs_mit` cookie and the form token.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The login page content as a string.
     async fn get_login_page(&self) -> Result<String> {
-        Ok(
-            self.client
-                .get(format!("{BASE_URL}/connexion/"))
-                .headers(self.get_headers())
-                .send()
-                .await?
-                .text()
-                .await?
-        )
+        Ok(self
+            .client
+            .get(format!("{BASE_URL}/connexion/"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?)
     }
 
     /// Initialize the session by retrieving the `__brs_mit` cookie, the form token, the challenge ID and the virtual pad keys.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Nothing if the session was initialized successfully, an error otherwise.
     pub async fn init_session(&mut self) -> Result<()> {
         // This first call is necessary to get the __brs_mit cookie
@@ -108,15 +109,21 @@ impl BoursoWebClient {
         {
             let mut store = self.cookie_store.lock().unwrap();
             store.insert(
-                Cookie::parse( // Necessary cookie to remove the domain migration error
+                Cookie::parse(
+                    // Necessary cookie to remove the domain migration error
                     "brsDomainMigration=migrated;",
-                    &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap()).unwrap(),
+                    &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap(),
+                )
+                .unwrap(),
                 &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap(),
             )?;
             store.insert(
-                Cookie::parse( // Necessary cookie to access the virtual pad
+                Cookie::parse(
+                    // Necessary cookie to access the virtual pad
                     format!("__brs_mit={};", self.brs_mit_cookie),
-                    &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap()).unwrap(),
+                    &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap(),
+                )
+                .unwrap(),
                 &reqwest::Url::parse(&format!("{BASE_URL}/")).unwrap(),
             )?;
         }
@@ -128,7 +135,8 @@ impl BoursoWebClient {
         self.config = extract_brs_config(&res)?;
         println!("Using version from {}", self.config.app_release_date);
 
-        let res = self.client
+        let res = self
+            .client
             .get(format!("{BASE_URL}/connexion/clavier-virtuel?_hinclude=1"))
             .headers(self.get_headers())
             .send()
@@ -146,36 +154,163 @@ impl BoursoWebClient {
     }
 
     /// Translate a password to virtual pad keys.
-    /// 
+    ///
     /// It matches each character of the password to a virtual pad key.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `password` - The password to translate.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The virtual pad keys as an array of strings.
     fn password_to_virtual_pad_keys(&self, password: &str) -> Result<Vec<String>> {
         let mut keys: Vec<String> = Vec::new();
         for c in password.chars() {
-            let number = c.to_digit(10)
+            let number = c
+                .to_digit(10)
                 .with_context(|| format!("Invalid character in password: {}", c))?;
             keys.push(self.virtual_pad_ids[number as usize].clone());
         }
 
         Ok(keys)
     }
-    
+
+    pub fn extract_strong_auth_form_token(document: &scraper::html::Html) -> Option<String> {
+        // Create a selector for the input element with id "form__token"
+        let token_selector = Selector::parse(r#"input[id="form__token"]"#).unwrap();
+
+        // Get the input element
+        if let Some(input_element) = document.select(&token_selector).next() {
+            // Extract the value attribute
+            if let Some(token_value) = input_element.value().attr("value") {
+                return Some(token_value.to_string());
+            }
+        }
+
+        None
+    }
+
+    pub fn extract_strong_auth_formstate(document: &scraper::html::Html) -> Option<String> {
+        let selector = Selector::parse(r#"div[data-strong-authentication-payload]"#).unwrap();
+
+        if let Some(element) = document.select(&selector).next() {
+            if let Some(payload_str) = element.value().attr("data-strong-authentication-payload") {
+                let v: Value = match serde_json::from_str(&payload_str) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        eprintln!("Failed to parse JSON: {}", e);
+                        return None;
+                    }
+                };
+
+                if let Some(form_state) = v["challenges"][0]["parameters"]["formScreen"]["actions"]
+                    ["check"]["api"]["params"]["formState"]
+                    .as_str()
+                {
+                    return Some(form_state.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    pub async fn handle_strong_auth_verification(&mut self) -> Result<bool> {
+        let res = self
+            .client
+            .get(format!("{BASE_URL}/securisation"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+        self.config = extract_brs_config(&res)?;
+
+        let res = self
+            .client
+            .get(format!("{BASE_URL}/securisation/validation"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+        let document = Html::parse_document(&res);
+        let token_form = Self::extract_strong_auth_form_token(&document);
+        let form_state = Self::extract_strong_auth_formstate(&document);
+
+        self.client
+        .request(Method::OPTIONS, format!(
+            "
+            https://api.boursobank.com/services/api/v1.7/_user_/{}/session/challenge/checkwebtoapp/10305",
+            self.config.user_hash.as_mut().unwrap()
+        ))
+        .headers(self.get_headers())
+        .send()
+        .await?
+        .text()
+        .await?;
+
+        // Implement Bearer authorization to headers
+        let mut headers = self.get_headers();
+        headers.insert(
+            "authorization",
+            format!("Bearer {}", self.config.default_api_bearer)
+                .parse()
+                .unwrap(),
+        );
+        // Send strong auth verification to app
+        self.client.post(format!("https://api.boursobank.com/services/api/v1.7/_user_/{}/session/challenge/startwebtoapp/10305", 
+            self.config.user_hash.as_mut().unwrap())
+        )
+            .headers(headers.clone())
+            .body(serde_json::json!({ "form_state": form_state }).to_string())
+            .send()
+            .await?
+            .text()
+            .await?;
+        // Await for user to press enter
+        println!("Click 'Enter' after the app verification is complete.");
+        io::stdin()
+            .read_line(&mut String::new())
+            .expect("Erreur lors de la lecture de l'entrée");
+
+        // Validate verification
+        self.client
+            .post("https://clients.boursobank.com/securisation/validation")
+            .headers(self.get_headers())
+            .form(&[("form[_token]", token_form)])
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        // Check if verificaiton is done
+        let res = self
+            .client
+            .get(format!("{BASE_URL}/"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if res.contains(r#"href="/se-deconnecter""#) {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Login to the Bourso website.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `customer_id` - The customer ID used to login.
     /// * `password` - The password used to login in plaintext.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Nothing if the login was successful, an error otherwise.
     pub async fn login(&mut self, customer_id: &str, password: &str) -> Result<()> {
         self.customer_id = customer_id.to_string();
@@ -183,7 +318,10 @@ impl BoursoWebClient {
         let data = reqwest::multipart::Form::new()
             .text("form[fakePassword]", "••••••••")
             .text("form[ajx]", "1")
-            .text("form[password]", self.password_to_virtual_pad_keys(password)?.join("|"))
+            .text(
+                "form[password]",
+                self.password_to_virtual_pad_keys(password)?.join("|"),
+            )
             // passwordAck is a JSON object that indicates the different times the user pressed on the virtual pad keys,
             // the click coordinates and the screen size. It seems like it's not necessary to fill the values to login.
             .text("form[passwordAck]", r#"{"ry":[],"pt":[],"js":true}"#)
@@ -192,7 +330,8 @@ impl BoursoWebClient {
             .text("form[_token]", self.token.to_string())
             .text("form[clientNumber]", self.customer_id.to_string());
 
-        let res = self.client
+        let res = self
+            .client
             .post(format!("{BASE_URL}/connexion/saisie-mot-de-passe"))
             .multipart(data)
             .headers(self.get_headers())
@@ -200,10 +339,14 @@ impl BoursoWebClient {
             .await?;
 
         if res.status() != 302 {
-            bail!("Could not login to Bourso website, status code: {}", res.status());
+            bail!(
+                "Could not login to Bourso website, status code: {}",
+                res.status()
+            );
         }
 
-        let res = self.client
+        let res = self
+            .client
             .get(format!("{BASE_URL}/"))
             .headers(self.get_headers())
             .send()
@@ -214,7 +357,12 @@ impl BoursoWebClient {
         if res.contains(r#"href="/se-deconnecter""#) {
             // Update the config with user hash
             self.config = extract_brs_config(&res)?;
-            println!("You are now logged in with user: {}", self.config.user_hash.as_ref().unwrap());
+            println!(
+                "You are now logged in with user: {}",
+                self.config.user_hash.as_ref().unwrap()
+            );
+        } else if res.contains(r#"href="/securisation""#) {
+            self.handle_strong_auth_verification().await?;
         } else {
             bail!("Could not login to Bourso website");
         }
@@ -223,17 +371,20 @@ impl BoursoWebClient {
     }
 
     /// Get the accounts list.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `kind` - The type of accounts to retrieve. If `None`, all accounts are retrieved.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The accounts list as a vector of `Account`.
     pub async fn get_accounts(&self, kind: Option<AccountKind>) -> Result<Vec<Account>> {
-        let res = self.client
-            .get(format!("{BASE_URL}/dashboard/liste-comptes?rumroute=dashboard.new_accounts&_hinclude=1"))
+        let res = self
+            .client
+            .get(format!(
+                "{BASE_URL}/dashboard/liste-comptes?rumroute=dashboard.new_accounts&_hinclude=1"
+            ))
             .headers(self.get_headers())
             .send()
             .await?
@@ -246,14 +397,13 @@ impl BoursoWebClient {
             Some(AccountKind::Trading) => extract_accounts(&res, AccountKind::Trading)?,
             Some(AccountKind::Loans) => extract_accounts(&res, AccountKind::Loans)?,
             // all accounts
-            _ => {
-                [
-                    extract_accounts(&res, AccountKind::Savings)?,
-                    extract_accounts(&res, AccountKind::Banking)?,
-                    extract_accounts(&res, AccountKind::Trading)?,
-                    extract_accounts(&res, AccountKind::Loans)?,
-                ].concat()
-            },
+            _ => [
+                extract_accounts(&res, AccountKind::Savings)?,
+                extract_accounts(&res, AccountKind::Banking)?,
+                extract_accounts(&res, AccountKind::Trading)?,
+                extract_accounts(&res, AccountKind::Loans)?,
+            ]
+            .concat(),
         };
 
         Ok(accounts)
@@ -261,17 +411,17 @@ impl BoursoWebClient {
 }
 
 /// Extract the __brs_mit cookie from a string, usually the response of the `/connexion/` page.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `res` - The response of the `/connexion/` page as a string.
-/// 
+///
 /// # Returns
-/// 
+///
 /// The __brs_mit cookie as a string.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// let res = r#"<!DOCTYPE html> \n<html>\n<head>\n    <script type="text/javascript">\n    document.cookie="__brs_mit=8e6912eb6a0268f0a2411668b8bf289f; domain=." + window.location.hostname + "; path=/; ";\n    window.location.reload();\n    </script>\n</head>\n<body>\n</body>\n</html>\n\n"#;
 /// let brs_mit_cookie = extract_brs_mit_cookie(&res).unwrap();
@@ -289,33 +439,31 @@ fn extract_brs_mit_cookie(res: &str) -> Result<String> {
 }
 
 /// Extract the challenge token from a string, usually the response of the `/connexion/clavier-virtuel?_hinclude=1` page.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `res` - The response of the `/connexion/clavier-virtuel?_hinclude=1` page as a string.
-/// 
+///
 /// # Returns
-/// 
+///
 /// The challenge token as a string.
 fn extract_challenge_token(res: &str) -> Result<String> {
-    let regex = Regex::new(r#"(?m)data-matrix-random-challenge\]"\)\.val\("(?P<challenge_id>.*?)"\)"#).unwrap();
-    let challenge_id = regex
-        .captures(&res)
-        .unwrap()
-        .name("challenge_id")
-        .unwrap();
+    let regex =
+        Regex::new(r#"(?m)data-matrix-random-challenge\]"\)\.val\("(?P<challenge_id>.*?)"\)"#)
+            .unwrap();
+    let challenge_id = regex.captures(&res).unwrap().name("challenge_id").unwrap();
 
     Ok(challenge_id.as_str().trim().to_string())
 }
 
 /// Extract the data matrix keys from a string, usually the response of the `/connexion/clavier-virtuel?_hinclude=1` page.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `res` - The response of the `/connexion/clavier-virtuel?_hinclude=1` page as a string.
-/// 
+///
 /// # Returns
-/// 
+///
 /// The data matrix keys as an array of 10 strings.
 fn extract_data_matrix_keys(res: &str) -> Result<[&str; 10]> {
     let regex = Regex::new(r#"(?ms)<button.*?data-matrix-key="(?P<matrix_key>[A-Z]{3})".*?src="(?P<svg>data:image.*?)">.*?</button>"#).unwrap();
@@ -335,48 +483,31 @@ fn extract_data_matrix_keys(res: &str) -> Result<[&str; 10]> {
 
 fn extract_token(res: &str) -> Result<String> {
     let regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#).unwrap();
-    let token = regex
-        .captures(&res)
-        .unwrap()
-        .name("token")
-        .unwrap();
+    let token = regex.captures(&res).unwrap().name("token").unwrap();
 
     Ok(token.as_str().trim().to_string())
 }
 
 fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
-    let regex = Regex::new(
-        match kind {
-            AccountKind::Savings => SAVINGS_PATTERN,
-            AccountKind::Banking => BANKING_PATTERN,
-            AccountKind::Trading => TRADING_PATTERN,
-            AccountKind::Loans => LOANS_PATTERN,
-        }
-    )?;
-    let accounts_ul = regex
-        .captures(&res)
-        .unwrap()
-        .get(1)
-        .unwrap()
-        .as_str();
+    let regex = Regex::new(match kind {
+        AccountKind::Savings => SAVINGS_PATTERN,
+        AccountKind::Banking => BANKING_PATTERN,
+        AccountKind::Trading => TRADING_PATTERN,
+        AccountKind::Loans => LOANS_PATTERN,
+    })?;
+    let accounts_ul = regex.captures(&res).unwrap().get(1).unwrap().as_str();
 
     let account_regex = Regex::new(ACCOUNT_PATTERN)?;
 
     let accounts = account_regex
         .captures_iter(&accounts_ul)
         .map(|m| {
+            println!("{:?}", m);
             Account {
-                id: m.name("id")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .to_string(),
-                name: m.name("name")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .to_string(),
-                balance: m.name("balance")
+                id: m.name("id").unwrap().as_str().trim().to_string(),
+                name: m.name("name").unwrap().as_str().trim().to_string(),
+                balance: m
+                    .name("balance")
                     .unwrap()
                     .as_str()
                     .trim()
@@ -386,11 +517,7 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
                     .replace("−", "-")
                     .parse::<isize>()
                     .unwrap(),
-                bank_name: m.name("bank_name")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .to_string(),
+                bank_name: m.name("bank_name").unwrap().as_str().trim().to_string(),
                 kind: kind,
             }
         })
@@ -413,15 +540,21 @@ mod tests {
     #[test]
     fn test_extract_challenge_token() {
         let token = extract_challenge_token(VIRTUAL_PAD_RES).unwrap();
-        assert_eq!(token, "THIS-STRING_represents0the1random__ElXSl-qJoXCKnqTBiew");
+        assert_eq!(
+            token,
+            "THIS-STRING_represents0the1random__ElXSl-qJoXCKnqTBiew"
+        );
     }
 
     #[test]
     fn test_extract_data_matrix_keys() {
         let keys = extract_data_matrix_keys(VIRTUAL_PAD_RES).unwrap();
-        assert_eq!(keys, ["WZE", "UVQ", "LGK", "TLT", "ISV", "RNI", "ANP", "UCA", "FIG", "YCL"]);
+        assert_eq!(
+            keys,
+            ["WZE", "UVQ", "LGK", "TLT", "ISV", "RNI", "ANP", "UCA", "FIG", "YCL"]
+        );
     }
-    
+
     #[test]
     fn test_extract_token() {
         let res = r#"data-backspace><i class="form-row-circles-password__backspace-icon / c-icon c-icon--backspace u-block"></i></button></div></div></div><input  id="form_ajx" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[ajx]" value="1" ><input  autocomplete="off" aria-label="Renseignez votre mot de passe en sélectionnant les 8 chiffres sur le clavier virtuel accessible ci-après par votre liseuse." data-matrix-password="1" id="form_password" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[password]" value="" ><input  data-password-ack="1" id="form_passwordAck" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[passwordAck]" value="{&quot;js&quot;:false}" ><input  data-authentication-factor-webauthn-detection="data-authentication-factor-webauthn-detection" id="form_platformAuthenticatorAvailable" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[platformAuthenticatorAvailable]" value="" ><input  data-matrix-random-challenge="1" id="form_matrixRandomChallenge" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[matrixRandomChallenge]" value="" ><input  id="form__token" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[_token]" value="45ed28b1-76ff-46a2-9202-0ee01928e6bb" ><hx:include id="hinclude__36d8139868f4bef54611a886784a3cbb"  src="/connexion/clavier-virtuel"><div data-matrix-placeholder class="sasmap sasmap--placeholder"><div class="bouncy-loader "><div class="bouncy-loader__balls"><div class="bouncy-loader__ball bouncy-loader__ball--left"></div><div class="bouncy-loader__ball bouncy-loader__ball--center"></div><div class="bouncy-loader__ball bouncy-loader__ball--right"></div></div></div></div></hx:include><div class="narrow-modal-window__input-container"><div class="u-text-center  o-vertical-interval-bottom "><div class="o-grid"><div class="o-grid__item"><button class="c-button--fancy c-button c-button--fancy u-1/1 c-button--primary"        type="submit"        data-login-submit       ><span class="c-button__text">Je me connecte</span></button></div><div class="o-grid__item  u-hidden" data-login-go-to-webauthn-wrapper><button class="c-button--fancy c-button c-button--fancy u-1/1 c-button--secondary"        type="button"        data-login-go-to-webauthn       ><span class="c-button__text">Clé de sécurité</span></button></div></div></div><div class="u-text-center"><a class="c-button--fancy c-button c-button--fancy u-1/1 c-button--tertiary c-button--link"        href="/connexion/mot-de-passe/retrouver"        data-pjax       ><span class="c-button__text">Mot de passe oublié ?</span></a></div></div><div class="narrow-modal-window__back-link"><button class="c-button--nav-back c-button u-1/1@xs-max c-button--text"        type="button"        data-login-back-to-login data-login-change-user-action="/connexion/oublier-identifiant"       ><span class="c-button__text"><div class="o-flex o-flex--align-center"><div class="c-button__icon"><svg xmlns="http://www.w3.org/2000/svg" width="7.8" height="14" viewBox="0 0 2.064 3.704"><path d="M1.712 3.644L.082 2.018a.212.212 0 0 1-.022-.02.206.206 0 0 1-.06-.146.206.206 0 0 1 .06-.147.212.212 0 0 1 .022-.019L1.712.06a.206.206 0 0 1 .291 0 .206.206 0 0 1 0 .291L.5 1.852l1.504 1.501a.206.206 0 0 1 0 .291.205.205 0 0 1-.146.06.205.205 0 0 1-.145-.06z"/></svg></div><div class="c-button__content">Mon identifiant</div></div></span></button></div></div><footer class="narrow-modal-footer narrow-modal-footer--mobile" data-transition-view-footer><div class="narrow-modal-footer__item narrow-modal-footer__item--mobile"><a href="" class="c-link c-link--icon c-link--pull-up c-link--subtle""#;
@@ -441,14 +574,10 @@ mod tests {
             ..client
         };
         let password_translated_to_keys = client.password_to_virtual_pad_keys("123654").unwrap();
-        assert_eq!(vec![
-            "UVQ",
-            "LGK",
-            "TLT",
-            "ANP",
-            "RNI",
-            "ISV", 
-        ], password_translated_to_keys);
+        assert_eq!(
+            vec!["UVQ", "LGK", "TLT", "ANP", "RNI", "ISV",],
+            password_translated_to_keys
+        );
     }
 
     #[test]
