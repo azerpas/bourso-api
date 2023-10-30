@@ -14,8 +14,6 @@ use cookie_store::Cookie;
 use regex::Regex;
 use reqwest::Method;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
-use scraper::{Html, Selector};
-use serde_json::Value;
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
     client: reqwest::Client,
@@ -177,46 +175,6 @@ impl BoursoWebClient {
 
         Ok(keys)
     }
-
-    pub fn extract_strong_auth_form_token(document: &scraper::html::Html) -> Option<String> {
-        // Create a selector for the input element with id "form__token"
-        let token_selector = Selector::parse(r#"input[id="form__token"]"#).unwrap();
-
-        // Get the input element
-        if let Some(input_element) = document.select(&token_selector).next() {
-            // Extract the value attribute
-            if let Some(token_value) = input_element.value().attr("value") {
-                return Some(token_value.to_string());
-            }
-        }
-
-        None
-    }
-
-    pub fn extract_strong_auth_formstate(document: &scraper::html::Html) -> Option<String> {
-        let selector = Selector::parse(r#"div[data-strong-authentication-payload]"#).unwrap();
-
-        if let Some(element) = document.select(&selector).next() {
-            if let Some(payload_str) = element.value().attr("data-strong-authentication-payload") {
-                let v: Value = match serde_json::from_str(&payload_str) {
-                    Ok(value) => value,
-                    Err(e) => {
-                        eprintln!("Failed to parse JSON: {}", e);
-                        return None;
-                    }
-                };
-
-                if let Some(form_state) = v["challenges"][0]["parameters"]["formScreen"]["actions"]
-                    ["check"]["api"]["params"]["formState"]
-                    .as_str()
-                {
-                    return Some(form_state.to_string());
-                }
-            }
-        }
-
-        None
-    }
     
     /// Performs strong authentication verification.
     ///
@@ -237,13 +195,16 @@ impl BoursoWebClient {
             .await?
             .text()
             .await?;
+
         self.config = extract_brs_config(&res)?;
+
         if let Some(config) = &self.config.user_hash {
             log_with_timestamp(format!("Retrieved user hash: `{}`", config).blue());
         } else {
             log_with_timestamp(format!("User hash not found in config during strong authentication.").red());
             bail!("Strong authentication failed: User hash not found.");
         }
+
         let res = self
             .client
             .get(format!("{BASE_URL}/securisation/validation"))
@@ -252,21 +213,20 @@ impl BoursoWebClient {
             .await?
             .text()
             .await?;
-        let document = Html::parse_document(&res);
-        let token_form = Self::extract_strong_auth_form_token(&document);
-        let form_state = Self::extract_strong_auth_formstate(&document);
+
+        let token_form = extract_strong_auth_form_token(&res)?;
+        let form_state = extract_strong_auth_formstate(&res)?;
 
         self.client
-        .request(Method::OPTIONS, format!(
-            "
-            https://api.boursobank.com/services/api/v1.7/_user_/_{}_/session/challenge/checkwebtoapp/10305",
-            self.config.user_hash.as_mut().unwrap()
-        ))
-        .headers(self.get_headers())
-        .send()
-        .await?
-        .text()
-        .await?;
+            .request(Method::OPTIONS, format!(
+                "https://api.boursobank.com/services/api/v1.7/_user_/_{}_/session/challenge/checkwebtoapp/10305",
+                self.config.user_hash.as_mut().unwrap()
+            ))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
 
         // Implement Bearer authorization to headers
         let mut headers = self.get_headers();
@@ -276,10 +236,15 @@ impl BoursoWebClient {
                 .parse()
                 .unwrap(),
         );
+
+
+        let strong_auth_url = format!(
+            "https://api.boursobank.com/services/api/v1.7/_user_/_{}_/session/challenge/startwebtoapp/10305", 
+            self.config.user_hash.as_mut().unwrap()
+        );
+
         // Send strong auth verification to app
-        self.client.post(format!("https://api.boursobank.com/services/api/v1.7/_user_/_{}_/session/challenge/startwebtoapp/10305", 
-            self.config.user_hash.as_mut().unwrap())
-        )
+        self.client.post(strong_auth_url)
             .headers(headers.clone())
             .body(serde_json::json!({ "form_state": form_state }).to_string())
             .send()
@@ -294,7 +259,7 @@ impl BoursoWebClient {
 
         io::stdin()
             .read_line(&mut String::new())
-            .expect("Erreur lors de la lecture de l'entrée");
+            .expect("Failed to read line");
 
         // Validate verification
         self.client
@@ -363,9 +328,10 @@ impl BoursoWebClient {
         if res.status() != 302 {
             log_with_timestamp(
                 format!(
-                "Login failed for user `{}`, status code: {}",
-                customer_id,
-                res.status()).red()
+                    "Login failed for user `{}`, status code: {}",
+                    customer_id,
+                    res.status()
+                ).red()
             );
             bail!(
                 "Could not login to Bourso website, status code: {}",
@@ -387,6 +353,7 @@ impl BoursoWebClient {
             self.config = extract_brs_config(&res)?;
             log_with_timestamp(format!("User `{}` logged in successfully.", customer_id).green());
         } else if res.contains(r#"href="/securisation""#) {
+            // Strong authentication required
             log_with_timestamp(format!("User `{}` requires strong authentication.", customer_id).yellow());
             match self.handle_strong_auth_verification().await {
                 Ok(true) => {
@@ -395,7 +362,7 @@ impl BoursoWebClient {
                 }
                 Ok(false) => {
                     log_with_timestamp(format!("Strong authentication verification failed or incomplete.").red());
-                    return Err("Strong authentication verification failed or incomplete.".into());
+                    bail!("Strong authentication verification failed or incomplete.");
                 }
                 Err(e) => {
                     log_with_timestamp(format!("An error occurred during strong authentication verification: {}",
@@ -403,8 +370,11 @@ impl BoursoWebClient {
                 }
             }
         } else {
-            log_with_timestamp(format!("Login failed for user {}, could not confirm login on Bourso website",
-            customer_id).red());
+            log_with_timestamp(
+                format!(
+                    "Login failed for user {}, could not confirm login on Bourso website",customer_id
+                ).red()
+            );
             bail!("Could not login to Bourso website");
         }
 
@@ -543,7 +513,6 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
     let accounts = account_regex
         .captures_iter(&accounts_ul)
         .map(|m| {
-            println!("{:?}", m);
             Account {
                 id: m.name("id").unwrap().as_str().trim().to_string(),
                 name: m.name("name").unwrap().as_str().trim().to_string(),
@@ -565,6 +534,51 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
         .collect::<Vec<Account>>();
 
     Ok(accounts)
+}
+
+/// Extract the form state from a string, usually the response of the `/securisation/validation` page.
+/// 
+/// # Arguments
+/// 
+/// * `res` - The response of the `/securisation/validation` page as a string.
+/// 
+/// # Returns
+/// 
+/// The form state as a string.
+fn extract_strong_auth_formstate(res: &str) -> Result<String> {
+    let regex = Regex::new(r#"(?ms)formState&quot;\s?:\s?&quot;(?P<formState>.*?)&quot;"#).unwrap();
+    let form_state_as_str = regex
+        .captures(res)
+        .unwrap()
+        .name("formState")
+        .unwrap()
+        .as_str()
+        .to_string();
+
+    Ok(form_state_as_str)
+}
+
+/// Extract the form strong auth token from a string, usually the response of the `/securisation/validation` page.
+/// 
+/// # Arguments
+/// 
+/// * `res` - The response of the `/securisation/validation` page as a string.
+/// 
+/// # Returns
+/// 
+/// The form state as a string.
+pub fn extract_strong_auth_form_token(res: &str) -> Result<String> {
+    let regex = Regex::new(r#"(?ms)form__token(.*?)value="(?P<token>.*?)""#).unwrap();
+
+    let form_token_as_str = regex
+        .captures(res)
+        .unwrap()
+        .name("token")
+        .unwrap()
+        .as_str()
+        .to_string();
+
+    Ok(form_token_as_str)
 }
 
 #[cfg(test)]
@@ -649,6 +663,18 @@ mod tests {
         assert_eq!(accounts[0].name, "Prêt personnel");
         assert_eq!(accounts[0].balance, -9495982);
         assert_eq!(accounts[0].bank_name, "Crédit Agricole");
+    }
+
+    #[test]
+    fn test_extract_strong_auth_formstate() {
+        let formstate_as_str = extract_strong_auth_formstate(VALIDATION_RES).unwrap();
+        assert_eq!(formstate_as_str, "eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.bQTnz6AuMJvmXXQsVPrxeQNvzDkimo7VNXxHeSBfClLufmCVZRUuyTwJF311JHuh");
+    }
+
+    #[test]
+    fn test_extract_strong_auth_form_token() {
+        let form_token = extract_strong_auth_form_token(VALIDATION_RES).unwrap();
+        assert_eq!(form_token, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c");
     }
 
     const VIRTUAL_PAD_RES: &str = r#"<div class="login-matrix">
@@ -1008,4 +1034,82 @@ mod tests {
 
 <!-- script -->
     "#;
+
+    const VALIDATION_RES: &str = r##"<script src="/build/2109.c9addb486c7311ea3d2b.js"></script>
+    <script src="/build/3762.5729c66025e7790f1387.js"></script>
+    <script src="/build/head.1b44b6f58c46a5dcdced.js"></script>
+    </head>
+    
+    <body class="is-boursobank     body--modal-full-display body--modal
+        " data-is-layout-modal="true">
+        <div id="modal-container" class="modal" data-pjax-container="#modal-container" role="dialog" aria-modal="true"
+            aria-labelledby="modal-title"><a class="skip-link" href="#modal-main-content" tabindex="0">Aller au contenu
+                principal</a>
+            <div class="modal__container ">
+                <h1 class="logo logo--white hidden-xs hidden-sm">
+                    <picture>
+                        <source media="(min-width:769px)" srcset="/bundles/boursoramadesign/img/logo-boursobank-blanc.png">
+                        <img src="/bundles/boursoramadesign/img/boursorama-banque-white-logo@2x-cache-1458301567.png"
+                            alt="BoursoBank">
+                    </picture>
+                    BoursoBank
+                </h1>
+                <div data-brs-scroll-notifier="(min-width: 1022px)"></div>
+                <div class="modal__header " data-brs-scroll-notifier-taget>
+                    <div class="modal__super-header modal__super-header--alone"><a title="Fermer la fenêtre " role="button"
+                            href="/" class="modal__back u-force-focus-dark"></a>
+                        <h2 class="page-title" tabindex="-1" id="modal-title" data-pjax-modal-title="">Sécurisation</h2>
+                    </div>
+                </div>
+                <div id="modal-main-content" class="modal__content ">
+                    <div class="content-block ">
+                        <hx:include id="hinclude__57eb968bea74b40579c60bed3496deb4"
+                            src="/aide/messages/modal?route=login.enrolment.otp&amp;showza=0"></hx:include>
+                        <hx:cached>
+                            <div id="za_content_login__enrolment__otp" class="managed  "></div>
+                        </hx:cached>
+                        <div data-strong-authentication-container>
+                            <form name="form" method="post" method="POST" data-strong-authentication-form="true"
+                                class="t-uibundle">
+                                <div
+                                    data-strong-authentication-payload="{&quot;challenges&quot;: [{&quot;type&quot;: &quot;brs-otp-webtoapp&quot;,&quot;realm&quot;: null,&quot;parameters&quot;: {&quot;formScreen&quot;: {&quot;title&quot;: &quot;Saisie du code&quot;,&quot;description&quot;: &quot;Ne fermez pas cette page. Pour valider l&#039;op\u00e9ration, ouvrez votre application BoursoBank sur votre smartphone et authentifiez-vous.&quot;,&quot;actions&quot;: {&quot;check&quot;: {&quot;label&quot;: &quot;Valider&quot;,&quot;featureId&quot;: &quot;customer.http_strong_auth_check&quot;,&quot;web&quot;: &quot;https:\/\/clients.boursobank.com\/feature-redirect?featureId=customer.http_strong_auth_check&amp;params%5BresourceId%5D=10305&quot;,&quot;api&quot;: {&quot;href&quot;: &quot;\/_user_\/_{userHash}_\/session\/challenge\/checkwebtoapp\/{resourceId}&quot;,&quot;method&quot;: &quot;POST&quot;,&quot;params&quot;: {&quot;resourceId&quot;: &quot;10305&quot;,&quot;formState&quot;: &quot;eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.bQTnz6AuMJvmXXQsVPrxeQNvzDkimo7VNXxHeSBfClLufmCVZRUuyTwJF311JHuh&quot;}},&quot;disabled&quot;: false},&quot;cancel&quot;: {&quot;label&quot;: &quot;Annuler mon op\u00e9ration&quot;,&quot;featureId&quot;: &quot;customer.dashboard_home&quot;,&quot;web&quot;: &quot;https:\/\/clients.boursobank.com\/feature-redirect?featureId=customer.dashboard_home&quot;,&quot;api&quot;: null,&quot;disabled&quot;: false}}},&quot;errorWrongOtp&quot;: {&quot;errorTitle&quot;: &quot;Erreur&quot;,&quot;errorDetails&quot;: &quot;Le service est momentan\u00e9ment indisponible ou le d\u00e9lai de l&#039;op\u00e9ration est d\u00e9pass\u00e9.&quot;,&quot;action&quot;: &quot;R\u00e9essayer&quot;,&quot;back&quot;: &quot;Annuler&quot;},&quot;title&quot;: &quot;Validation de votre op\u00e9ration&quot;,&quot;otpSubject&quot;: &quot;10305&quot;,&quot;canFallback&quot;: true,&quot;fallbackTitle&quot;: &quot;Vous n&#039;avez pas acc\u00e8s \u00e0 votre application ?&quot;,&quot;label&quot;: &quot;Utiliser mon application BoursoBank&quot;,&quot;smallDescription&quot;: &quot;Envoyer une notification \u00e0 un autre appareil&quot;,&quot;icon&quot;: null,&quot;presentationScreen&quot;: {&quot;description&quot;: &quot;Pour des raisons de s\u00e9curit\u00e9, nous souhaitons v\u00e9rifier votre identit\u00e9. Pour cela, munissez-vous d&#039;un autre appareil avec lequel vous vous \u00eates d\u00e9j\u00e0 identifi\u00e9 via l&#039;application.&quot;,&quot;userContact&quot;: null,&quot;actions&quot;: {&quot;start&quot;: {&quot;label&quot;: &quot;Envoyer une notification \u00e0 mon appareil&quot;,&quot;featureId&quot;: &quot;customer.http_strong_auth_start&quot;,&quot;web&quot;: &quot;https:\/\/clients.boursobank.com\/feature-redirect?featureId=customer.http_strong_auth_start&amp;params%5BresourceId%5D=10305&quot;,&quot;api&quot;: {&quot;href&quot;: &quot;\/_user_\/_{userHash}_\/session\/challenge\/startwebtoapp\/{resourceId}&quot;,&quot;method&quot;: &quot;POST&quot;,&quot;params&quot;: {&quot;resourceId&quot;: &quot;10305&quot;,&quot;formState&quot;: &quot;eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.bQTnz6AuMJvmXXQsVPrxeQNvzDkimo7VNXxHeSBfClLufmCVZRUuyTwJF311JHuh&quot;}},&quot;disabled&quot;: false},&quot;cancel&quot;: {&quot;label&quot;: &quot;Annuler&quot;,&quot;featureId&quot;: &quot;customer.dashboard_home&quot;,&quot;web&quot;: &quot;https:\/\/clients.boursobank.com\/feature-redirect?featureId=customer.dashboard_home&quot;,&quot;api&quot;: null,&quot;disabled&quot;: false}}},&quot;message&quot;: {&quot;id&quot;: &quot;fraud_without_agreement&quot;,&quot;type&quot;: &quot;INFO&quot;,&quot;detail&quot;: null,&quot;title&quot;: null,&quot;body&quot;: &quot;&lt;div\nstyle=\&quot;\ncolor: #1A2E45;\nfont-size: 1.2em;\ndisplay: flex;\nflex-wrap: wrap;\njustify-content: space-evenly\n\&quot;&gt;\n&lt;img src=\&quot;https:\/\/s.brsimg.com\/static-1686228603\/i\/otp\/introduction\/fraud.png\&quot; srcset=\&quot;https:\/\/s.brsimg.com\/static-1686228603\/i\/otp\/introduction\/fraud2x.png 2x\&quot; alt=\&quot;Attention, risque de fraude !\&quot;&gt;\n&lt;div style=\&quot;margin: auto 0; flex: 0.9; min-width: 300px;\&quot;&gt;\n&lt;div style=\&quot;font-size: 1.3em; color: #003883;\&quot;&gt;Attention, risque de fraude !&lt;\/div&gt;\n&lt;br&gt;\n&lt;strong style=\&quot;font-size: 1em\&quot;&gt;Ne validez pas l&amp;#039;op\u00e9ration &amp;quot;Nouvel appareil&amp;quot; si vous n&amp;#039;en \u00eates pas \u00e0 l&amp;#039;origine&lt;\/strong&gt;\n&lt;br&gt;&lt;br&gt;\n&lt;span&gt;Un collaborateur BoursoBank ne vous appellera &lt;strong&gt;JAMAIS&lt;\/strong&gt; pour le faire.&lt;\/span&gt;\n&lt;\/div&gt;\n&lt;\/div&gt;\n&quot;,&quot;params&quot;: null,&quot;category&quot;: &quot;custom&quot;,&quot;actions&quot;: [{&quot;label&quot;: &quot;Continuer&quot;,&quot;featureId&quot;: &quot;customer.http_strong_auth_start&quot;,&quot;web&quot;: &quot;https:\/\/clients.boursobank.com\/feature-redirect?featureId=customer.http_strong_auth_start&quot;,&quot;api&quot;: null,&quot;disabled&quot;: false}],&quot;flags&quot;: [&quot;ACTIONS_DISPLAY_DELAYED&quot;],&quot;targets&quot;: [],&quot;visualId&quot;: null,&quot;visualTheme&quot;: &quot;secondary&quot;,&quot;medias&quot;: []}}}],&quot;introduction&quot;: {&quot;title&quot;: &quot;Validation de votre op\u00e9ration&quot;,&quot;message&quot;: {&quot;id&quot;: &quot;fraud_without_agreement&quot;,&quot;type&quot;: &quot;INFO&quot;,&quot;detail&quot;: null,&quot;title&quot;: null,&quot;body&quot;: &quot;&lt;div\nstyle=\&quot;\ncolor: #1A2E45;\nfont-size: 1.2em;\ndisplay: flex;\nflex-wrap: wrap;\njustify-content: space-evenly\n\&quot;&gt;\n&lt;img src=\&quot;https:\/\/s.brsimg.com\/static-1686228603\/i\/otp\/introduction\/fraud.png\&quot; srcset=\&quot;https:\/\/s.brsimg.com\/static-1686228603\/i\/otp\/introduction\/fraud2x.png 2x\&quot; alt=\&quot;Attention, risque de fraude !\&quot;&gt;\n&lt;div style=\&quot;margin: auto 0; flex: 0.9; min-width: 300px;\&quot;&gt;\n&lt;div style=\&quot;font-size: 1.3em; color: #003883;\&quot;&gt;Attention, risque de fraude !&lt;\/div&gt;\n&lt;br&gt;\n&lt;strong style=\&quot;font-size: 1em\&quot;&gt;Ne validez pas l&amp;#039;op\u00e9ration &amp;quot;Nouvel appareil&amp;quot; si vous n&amp;#039;en \u00eates pas \u00e0 l&amp;#039;origine&lt;\/strong&gt;\n&lt;br&gt;&lt;br&gt;\n&lt;span&gt;Un collaborateur BoursoBank ne vous appellera &lt;strong&gt;JAMAIS&lt;\/strong&gt; pour le faire.&lt;\/span&gt;\n&lt;\/div&gt;\n&lt;\/div&gt;\n&quot;,&quot;params&quot;: null,&quot;category&quot;: &quot;custom&quot;,&quot;actions&quot;: [{&quot;label&quot;: &quot;Poursuivre l&#039;op\u00e9ration&quot;,&quot;featureId&quot;: &quot;ext.continue&quot;,&quot;web&quot;: null,&quot;api&quot;: null,&quot;disabled&quot;: false},{&quot;label&quot;: &quot;Annuler&quot;,&quot;featureId&quot;: &quot;ext.cancel&quot;,&quot;web&quot;: &quot;https:\/\/clients.boursobank.com\/feature-redirect?featureId=customer.dashboard_home&quot;,&quot;api&quot;: null,&quot;disabled&quot;: false}],&quot;flags&quot;: [&quot;ACTIONS_DISPLAY_DELAYED&quot;],&quot;targets&quot;: [],&quot;visualId&quot;: null,&quot;visualTheme&quot;: &quot;secondary&quot;,&quot;medias&quot;: []}},&quot;showChallengeChoice&quot;: false}">
+                                </div><input id="form__token" type="hidden" class="c-field__input"
+                                    data-brs-text-input="data-brs-text-input" name="form[_token]"
+                                    value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c">
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    $(function () {
+                        var state = $('#modal-container').data('pushstate:history:closestate');
+    
+                        if (!state) {
+                            return;
+                        }
+    
+                        $('#modal-container > .modal__close')
+                            .attr('title', state.title)
+                            .attr('href', state.location)
+                            .data('pushstate:history:state', state.state);
+                    });
+                </script>
+            </div>
+        </div>
+        <aside id="drawer" class="c-drawer"></aside>
+        <div class="modal-background"><span></span></div>
+        <div class="modal-alert-background"><span></span></div>
+        <div data-survey-button-container>
+            <div data-survey-button-instance data-survey-button-identifier="vuejs-survey-button-component"></div>
+        </div>
+        <script src="/build/9755.d22f888134aeefc9ad08.js"></script>
+        <script src="/build/critical.8f4107da2df04a690e11.js"></script>
+        <script src="/build/brs-survey-button.687c78665a884e3ecdae.js"></script>
+        <script src="/build/brs-user-satisfaction-review.4cc79c65f2c8b9a27ccc.js"></script>
+        <script src="/build/6972.14b67b0f3dfed275658c.js"></script>
+        <script src="/build/4988.03f12273d536cc991e0a.js"></script>
+        <script src="/build/strong-authentication.213c4c106a8fa1066d20.js"></script>
+        <script src="/build/brs-pfm-aggregator.3cb84ea858ac60673afb.js"></script>
+        <script src="/build/boomerang.c5edf41ce0801c4b2c6c.js"></script>
+    </body>"##;
 }
