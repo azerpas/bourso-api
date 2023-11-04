@@ -71,6 +71,10 @@ impl BoursoWebClient {
         
         self.check(&order_data).await?;
 
+        let response = self.confirm(&order_data.resource_id.as_ref().unwrap()).await?;
+
+        println!("Order ID: {}", response.order_id);
+
         Ok(())
     }   
 
@@ -135,6 +139,39 @@ impl BoursoWebClient {
         
         Ok(response)
     }
+
+    /// Confirm an order
+    /// 
+    /// # Arguments
+    /// 
+    /// * `resource_id` - Resource ID of the order to confirm
+    /// 
+    /// # Returns
+    /// 
+    /// An order confirm response
+    async fn confirm(&self, resource_id: &str) -> Result<OrderConfirmResponse> {
+        let url = get_order_confirm_url(&self.config)?;
+        let response = self.client
+            .post(url)
+            .body(serde_json::to_string(&serde_json::json!({
+                "resourceId": resource_id
+            }))?)
+            .send()
+            .await?;
+
+        let status_code = response.status();
+
+        let response = response.text().await?;
+
+        if status_code != 201 {
+            return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
+        }
+
+        let response: OrderConfirmResponse = serde_json::from_str(&response)
+            .context("Failed to parse order prepare response")?;
+
+        Ok(response)
+    }
 }
 
 fn get_order_url(config: &Config) -> Result<String> {
@@ -164,6 +201,15 @@ fn get_order_check_url(config: &Config) -> Result<String> {
         format!(
             "{}/ordersimple/check",
             get_trading_base_url(config)?
+        )
+    )
+}
+
+fn get_order_confirm_url(config: &Config) -> Result<String> {
+    Ok(
+        format!(
+            "{}/ordersimple/confirm",
+            get_order_url(config)?
         )
     )
 }
@@ -446,4 +492,57 @@ pub struct FeesExplanation {
 pub struct Message {
     pub title: String,
     pub content: Vec<Vec<String>>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderConfirmResponse {
+    pub order_id: String,
+    pub order_state_label: String,
+    pub ord_stat: String,
+    pub action_message: ActionMessage,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionMessage {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub detail: Value,
+    pub title: Value,
+    pub body: Value,
+    pub params: Value,
+    pub category: String,
+    pub actions: Vec<Action>,
+    pub flags: Vec<Value>,
+    pub targets: Vec<Value>,
+    pub visual_id: Value,
+    pub visual_theme: String,
+    pub medias: Vec<Value>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Action {
+    pub label: String,
+    pub feature_id: String,
+    pub web: String,
+    pub api: ActionApi,
+    pub disabled: bool,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionApi {
+    pub href: String,
+    pub method: String,
+    pub params: ActionApiParams,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionApiParams {
+    pub account_type: String,
+    pub account_key: String,
 }
