@@ -50,7 +50,12 @@ impl BoursoWebClient {
             // Set expiration date to date given by the API
             order_data.order_expiration_date = response.prefill_order_data.order_validity;
         } else {
-            // TODO: set order_data.order_expiration_date to today
+            // Set order_data.order_expiration_date to today
+            order_data.order_expiration_date = Some(
+                chrono::Utc::now()
+                .format("%Y-%m-%d")
+                .to_string()
+            );
         }
 
         order_data.resource_id = response.prefill_order_data.resource_id;
