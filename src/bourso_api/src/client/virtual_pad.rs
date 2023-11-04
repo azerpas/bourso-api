@@ -106,7 +106,7 @@ pub fn extract_challenge_token(res: &str) -> Result<String> {
 
 mod tests {
     use super::{extract_data_matrix_keys, password_to_virtual_pad_keys, extract_challenge_token};
-    use crate::bourso::{client::BoursoWebClient};
+    use crate::{client::BoursoWebClient};
 
     #[test]
     fn test_password_to_virtual_pad_keys() {

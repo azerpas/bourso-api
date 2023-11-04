@@ -1,4 +1,4 @@
-use crate::bourso::{
+use crate::{
     account::{AccountKind, Account},
     constants::{BASE_URL, SAVINGS_PATTERN, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN, ACCOUNT_PATTERN}
 };
@@ -105,7 +105,7 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
 }
 
 mod tests {
-    use crate::bourso::{client::account::extract_accounts, account::AccountKind};
+    use crate::{client::account::extract_accounts, account::AccountKind};
 
     #[test]
     fn test_extract_accounts() {

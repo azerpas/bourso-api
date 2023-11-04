@@ -208,34 +208,6 @@ impl BoursoWebClient {
 
         Ok(())
     }
-
-    /// Make a GET request to the given path
-    /// 
-    /// # Arguments
-    /// 
-    /// * `path` - The path to the ressource to get (e.g `/dashboard/liste-comptes`)
-    /// 
-    /// # Returns
-    /// 
-    /// The response received by the client
-    /// 
-    /// # Example
-    /// 
-    /// ```
-    /// let client: BoursoWebClient = BoursoWebClient::new();
-    /// client.init_session().await?;
-    /// client.login(&customer_id, &password).await?;
-    /// client.http_get("/dashboard/liste-comptes")
-    /// ```
-    pub async fn http_get(&self, path: &str) -> Result<Response> {
-        let res = self.client
-            .get(format!("{BASE_URL}{path}"))
-            .headers(self.get_headers())
-            .send()
-            .await?;
-
-        Ok(res)
-    } 
 }
 
 /// Extract the __brs_mit cookie from a string, usually the response of the `/connexion/` page.
@@ -247,14 +219,6 @@ impl BoursoWebClient {
 /// # Returns
 /// 
 /// The __brs_mit cookie as a string.
-/// 
-/// # Example
-/// 
-/// ```
-/// let res = r#"<!DOCTYPE html> \n<html>\n<head>\n    <script type="text/javascript">\n    document.cookie="__brs_mit=8e6912eb6a0268f0a2411668b8bf289f; domain=." + window.location.hostname + "; path=/; ";\n    window.location.reload();\n    </script>\n</head>\n<body>\n</body>\n</html>\n\n"#;
-/// let brs_mit_cookie = extract_brs_mit_cookie(&res).unwrap();
-/// assert_eq!(brs_mit_cookie, "8e6912eb6a0268f0a2411668b8bf289f");
-/// ```
 fn extract_brs_mit_cookie(res: &str) -> Result<String> {
     let regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);").unwrap();
     let brs_mit_cookie = regex
