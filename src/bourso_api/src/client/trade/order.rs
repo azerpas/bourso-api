@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 use anyhow::{Result, Context};
 use serde_json::Value;
 
-use crate::bourso::{
+use crate::{
     account::{Account, AccountKind}, client::config::Config, 
 };
 
