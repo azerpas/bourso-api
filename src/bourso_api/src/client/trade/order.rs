@@ -9,6 +9,15 @@ use crate::{
 use super::{BoursoWebClient, get_trading_base_url};
 
 impl BoursoWebClient {
+    /// Place an order
+    /// 
+    /// # Arguments
+    /// 
+    /// * `side` - Order side (buy or sell)
+    /// * `account` - Account to use. Must be a trading account
+    /// * `symbol` - Symbol to trade
+    /// * `quantity` - Quantity to trade
+    /// * `order_data` - Order data. If not set, will be fetched from Bourso API and filled with the given parameters
     pub async fn order(&self, side: OrderSide, account: &Account, symbol: &str, quantity: usize, order_data: Option<OrderData>) -> Result<()> {
 
         if account.kind != AccountKind::Trading {
@@ -96,7 +105,16 @@ impl BoursoWebClient {
         Ok(response)
     }
 
-    async fn check(&self, data: &OrderData) -> Result<()> {
+    /// Check if an order is valid
+    /// 
+    /// # Arguments
+    /// 
+    /// * `data` - Order data to check
+    /// 
+    /// # Returns
+    /// 
+    /// An order check response
+    async fn check(&self, data: &OrderData) -> Result<OrderCheckResponse> {
         let url = get_order_check_url(&self.config)?;
         let response = self.client
             .post(url)
@@ -112,10 +130,10 @@ impl BoursoWebClient {
             return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
         }
 
-        // let response: OrderPrepareResponse = serde_json::from_str(&response)
-        //    .context("Failed to parse order prepare response")?;
+        let response: OrderCheckResponse = serde_json::from_str(&response)
+            .context("Failed to parse order prepare response")?;
         
-        Ok(())
+        Ok(response)
     }
 }
 
@@ -372,4 +390,60 @@ pub struct OrderData {
     /// Validity date in format "2022-11-01"
     #[serde(rename = "orderValidity")]
     order_validity: Option<String>,
+    
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "buyingPower")]
+    pub buying_power: Option<f64>,
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "stopPx")]
+    pub stop_px: Option<Value>,
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "trailPct")]
+    pub trail_pct: Option<Value>,
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "estimatedFees")]
+    pub estimated_fees: Option<Vec<EstimatedFee>>,
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "exchangeLabel")]
+    pub exchange_label: Option<String>,
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "feesExplanation")]
+    pub fees_explanation: Option<FeesExplanation>,
+    /// Received at the `/ordersimple/check` endpoint
+    #[serde(rename = "estimatedBalance")]
+    pub estimated_balance: Option<f64>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderCheckResponse {
+    pub acceptability_messages: Option<Vec<Message>>,
+    pub check_order_data: OrderData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimatedFee {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub label: String,
+    pub amount: f64,
+    pub percentage: f64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeesExplanation {
+    pub start_amount: String,
+    pub product_fee: String,
+    pub service_fee: String,
+    pub scenarios: Vec<Message>,
+    // pub translations: Translations,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Message {
+    pub title: String,
+    pub content: Vec<Vec<String>>,
 }
