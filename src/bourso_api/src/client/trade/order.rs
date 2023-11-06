@@ -80,6 +80,8 @@ impl BoursoWebClient {
 
     /// Prepare an order
     /// 
+    /// This will fetch trading data for the given symbol
+    /// 
     /// # Arguments
     /// 
     /// * `account` - Account to use. Must be a trading account
@@ -131,7 +133,7 @@ impl BoursoWebClient {
         let response = response.text().await?;
 
         if status_code != 200 {
-            return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
+            return Err(anyhow::anyhow!("Failed to get order check response: {}", response));
         }
 
         let response: OrderCheckResponse = serde_json::from_str(&response)
@@ -214,15 +216,19 @@ fn get_order_confirm_url(config: &Config) -> Result<String> {
     )
 }
 
+/// Data fetched from the `/order/prepare` endpoint
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderPrepareResponse {
+    /// ID of the order, will be used to confirm the order
     pub resource_id: String,
     pub is_pcc: bool,
     pub pcc_rights: PccRights,
     pub has_right_to_assign: bool,
     pub has_right_to_force: bool,
+    /// Current position
     pub position: Position,
+    /// Account used to place the order informations
     pub account: PrepareOrderAccount,
     pub account_fiscality: AccountFiscality,
     pub account_fees_profile: String,
@@ -253,34 +259,53 @@ pub struct Position {
     pub srd_quantity: i64,
 }
 
+/// Data fetched from the `/order/prepare` endpoint
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareOrderAccount {
     pub has_pfm: bool,
+    /// The account RIB (Relevé d'Identité Bancaire)
     pub rib: String,
+    /// The account IBAN (International Bank Account Number)
     pub iban: String,
+    /// The account BIC (Bank Identifier Code)
     pub bic: String,
+    /// The account number
     pub account_number: String,
+    /// The account name
     pub name: String,
+    /// The account balance in euros. More like the instant value of the account
+    /// depending on the current market value of the assets and the cash balance
     pub balance: f64,
     pub internal: bool,
+    /// The account currency
     pub currency: String,
+    /// The account type (e.g PEA, PEA-PME, CTO, etc.)
     #[serde(rename = "type")]
     pub type_field: String,
+    /// Is the account a professional account
     pub professional: bool,
+    /// The account subtype (e.g ISA - Individual Savings Account, etc.)
     pub subtype: String,
+    /// The account role (e.g titular)
     pub role: String,
+    /// The account bank ID (e.g 1 for BoursoBank)
     pub bank_id: String,
+    /// The account bank name (e.g BoursoBank)
     pub bank_name: String,
     pub cash_out: i64,
     pub cash_in: i64,
     pub account_key: String,
     pub pfm_account_key: Value,
+    /// The account type category (e.g TRADING, SAVINGS, etc.)
     pub type_category: String,
     pub has_unregular_operations: bool,
+    /// The account shortname
     pub short_name: String,
+    /// Owned by a minor
     pub minor: bool,
     pub contact_id_owner: Value,
+    /// KADOR is a special account for minors by BoursoBank
     #[serde(rename = "isKADOR")]
     pub is_kador: bool,
     pub profile_type: Value,
@@ -291,14 +316,20 @@ pub struct PrepareOrderAccount {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
+    /// The first time a cash transfer was made to the account
     pub first_cash_transfer_date: String,
+    /// Gain/Losses in as a float value
     pub gain_losses_percent: f64,
     pub done_gain_losses_percent: i64,
+    /// Current cash balance
     pub cash: String,
+    /// Current gain/losses in euros
     pub gain_losses: f64,
     pub done_gain_losses: i64,
     pub clearance_balance: i64,
+    /// The account stocks value in euros
     pub stocks: f64,
+    /// Today's date in format "2022-11-01"
     pub date: String,
     pub next_liquidation_date: String,
 }
@@ -322,13 +353,19 @@ pub struct PendingExecutedOrders {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Symbol {
+    /// Exchange Label on which the symbol is traded (e.g Euronext Paris)
     pub exchange_label: String,
+    /// Symbol ID (e.g 1rTPE500 for AMUNDI PEA S&P 500 ESG UCITS ETF)
     pub symbol: String,
     pub nb_decimals: i64,
+    /// Symbol currency (e.g EUR)
     pub currency: String,
     pub label: String,
+    /// ISIN (International Securities Identification Numbers) of the symbol (e.g FR0013412285)
     pub isin: String,
+    /// Last price of the symbol
     pub last_price: f64,
+    /// Morning Star key information document URL (e.g https://doc.morningstar.com/LatestDoc.aspx?clientid=boursorama&key=507703e53b7dec23&language=454&investmentid=F000013MGI&documenttype=299&market=1443&investmenttype=1&frame=0)
     pub fund_morning_star_pdf_url: String,
     pub direct_issuer_kid_url: Value,
     pub priips_kid_url: Value,
@@ -360,28 +397,37 @@ pub struct ExtendedHours {
     pub is_open: bool,
 }
 
+/// Data fetched from the `/order/prepare` endpoint and used to fill the default order data
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareOrderData {
+    /// Minimum expiration date in format "2022-11-01"
     pub min_expire_tm: String,
+    /// Maximum expiration date in format "2022-11-01"
     pub max_expire_tm: String,
+    /// Invalid dates list in format "2022-11-01"
     pub invalid_dates_list: Vec<String>,
+    /// List of order types per side (buy or sell)
     pub list_ord_type: ListOrdType,
     pub list_risk_md: Vec<String>,
-    pub side_list: Vec<String>,
+    /// List of possible sides (buy or sell)
+    pub side_list: Vec<OrderSide>,
     // pub config_ord_type: ConfigOrdType,
 }
 
+/// Possible order types per side (buy or sell)
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListOrdType {
-    pub b: Vec<String>,
-    pub s: Vec<String>,
+    /// Buy order types
+    pub b: Vec<OrderKind>,
+    /// Sell order types
+    pub s: Vec<OrderKind>,
 }
 
 /// Type of order
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
-enum OrderKind {
+pub enum OrderKind {
     #[default]
     #[serde(rename = "LIM")]
     Limit,
@@ -411,6 +457,7 @@ pub enum OrderSide {
     Sell,
 }
 
+/// Order data submitted to the `/ordersimple/check` endpoint
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct OrderData {
     #[serde(rename = "orderType")]
