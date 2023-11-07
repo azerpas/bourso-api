@@ -174,6 +174,36 @@ impl BoursoWebClient {
 
         Ok(response)
     }
+
+    /// Cancel an order that has not been executed yet
+    /// 
+    /// # Arguments
+    /// 
+    /// * `account` - Account to use. Must be a trading account
+    /// * `order_id` - ID of the order to cancel
+    pub async fn cancel_order(&self, account: &Account, order_id: &str) -> Result<()> {
+        let url = get_cancel_order_url(&self.config)?;
+        let response = self.client
+            .post(url)
+            .body(serde_json::to_string(&serde_json::json!({
+                "accountKey": &account.id,
+                "reference": order_id
+            }))?)
+            .send()
+            .await?;
+
+        let status_code = response.status();
+
+        let response = response.text().await?;
+
+        if status_code != 200 {
+            return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
+        }
+
+        println!("Order {} cancelled", order_id);
+
+        Ok(())
+    }
 }
 
 fn get_order_url(config: &Config) -> Result<String> {
@@ -211,6 +241,15 @@ fn get_order_confirm_url(config: &Config) -> Result<String> {
     Ok(
         format!(
             "{}/ordersimple/confirm",
+            get_order_url(config)?
+        )
+    )
+}
+
+fn get_cancel_order_url(config: &Config) -> Result<String> {
+    Ok(
+        format!(
+            "{}/orderdetail/cancel",
             get_order_url(config)?
         )
     )
