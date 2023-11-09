@@ -1,11 +1,29 @@
 use anyhow::Result;
-use clap::{Arg, Command};
+use bourso_api::client::trade::order::OrderSide;
+use clap::{Arg, Command, builder::ValueParser};
+
+use validate::validate_account_id;
 
 mod settings;
+mod validate;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
+
+    pretty_env_logger::init();
+
+    let account_arg = Arg::new("account")
+        .short('a')
+        .long("account")
+        .help(
+            r#"The account to use by its 'id' (e.g: 'e51f635524a7d506e4d4a7a8088b6278').
+    You can get this info with the command `bourso accounts`"#
+        )
+        .default_value("PEA")
+        .value_parser(clap::value_parser!(String)) // Enforce input as String
+        .value_parser(ValueParser::new(validate_account_id))
+        .required(true);
 
     let matches = Command::new("bourso")
         .version(VERSION.unwrap_or("0.0.1"))
@@ -51,25 +69,51 @@ async fn main() -> Result<()> {
         // .subcommand( // interactive mode
         .subcommand(
             Command::new("trade")
-                .about("Trade on your trading accounts")
+                .about("Trade with your accounts")
                 .subcommand(
-                    Command::new("list")
-                        .about("List all your current orders")
+                    Command::new("order")
+                    .subcommand(
+                        Command::new("list")
+                            .about("List all your current orders")
+                            .arg(account_arg.clone())
+                    )
+                    .subcommand(
+                        Command::new("new")
+                            .about("Place a new order")
+                            .arg(
+                                Arg::new("side")
+                                .long("side")
+                                .help("The side of the order (buy/sell)")
+                                .required(true)
+                                .value_parser(clap::value_parser!(OrderSide))
+                            )
+                            .arg(account_arg.clone())
+                            .arg(
+                                Arg::new("symbol")
+                                .long("symbol")
+                                .help("The symbol id of the order (e.g: '1rTCW8')")
+                                .required(true)
+                            )
+                            .arg(
+                                Arg::new("quantity")
+                                .short('q')
+                                .long("quantity")
+                                .help("The quantity of the order (e.g: '1')")
+                                .required(true)
+                                .value_parser(clap::value_parser!(usize))
+                            )
+                            // Price limit
+                            // Validity date
+                            // TODO: handle other types of orders
+                    )
+                    .subcommand(
+                        Command::new("cancel")
+                            .about("Cancel an order")
+                            .arg(account_arg.clone())
+                    )
+                    .subcommand_required(true)
                 )
-                .subcommand(
-                    Command::new("buy")
-                        .about("Buy a stock")
-                )
-                .arg(
-                    Arg::new("account")
-                        .short('a')
-                        .long("account")
-                        .help(
-                            r#"The account to use by its 'name' (e.g: 'PEA') or 'id' (e.g: 'e51f635524a7d506e4d4a7a8088b6278').
-You can get these infos with the command `bourso accounts`"#
-                        )
-                        .default_value("PEA")
-                )
+                .subcommand_required(true)
         )
         .get_matches();
 

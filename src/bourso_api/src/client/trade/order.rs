@@ -1,3 +1,4 @@
+use log::{debug, info};
 use serde::{Serialize, Deserialize};
 use anyhow::{Result, Context};
 use serde_json::Value;
@@ -18,13 +19,15 @@ impl BoursoWebClient {
     /// * `symbol` - Symbol to trade
     /// * `quantity` - Quantity to trade
     /// * `order_data` - Order data. If not set, will be fetched from Bourso API and filled with the given parameters
-    pub async fn order(&self, side: OrderSide, account: &Account, symbol: &str, quantity: usize, order_data: Option<OrderData>) -> Result<()> {
+    pub async fn order(&self, side: OrderSide, account: &Account, symbol: &str, quantity: usize, order_data: Option<OrderData>) -> Result<String> {
 
         if account.kind != AccountKind::Trading {
             return Err(anyhow::anyhow!("Account is not a trading account"));
         }
 
         let response = self.prepare(account, symbol).await?;
+
+        debug!("Prepare data {:#?}", response);
 
         // Either the order data set by the user
         // or a prefilled data object fetched from Bourso API
@@ -67,15 +70,17 @@ impl BoursoWebClient {
             );
         }
 
-        order_data.resource_id = response.prefill_order_data.resource_id;
+        order_data.resource_id = Some(response.resource_id);
+
+        debug!("Order data: {:#?}", order_data);
         
         self.check(&order_data).await?;
 
         let response = self.confirm(&order_data.resource_id.as_ref().unwrap()).await?;
 
-        println!("Order ID: {}", response.order_id);
+        info!("Order passed with ID: {}", response.order_id);
 
-        Ok(())
+        Ok(response.order_id)
     }   
 
     /// Prepare an order
@@ -124,6 +129,7 @@ impl BoursoWebClient {
         let url = get_order_check_url(&self.config)?;
         let response = self.client
             .post(url)
+            .header("Content-Type", "application/json")
             .body(serde_json::to_string(data)?)
             .send()
             .await?;
@@ -137,7 +143,7 @@ impl BoursoWebClient {
         }
 
         let response: OrderCheckResponse = serde_json::from_str(&response)
-            .context("Failed to parse order prepare response")?;
+            .context("Failed to parse order check response")?;
         
         Ok(response)
     }
@@ -155,6 +161,7 @@ impl BoursoWebClient {
         let url = get_order_confirm_url(&self.config)?;
         let response = self.client
             .post(url)
+            .header("Content-Type", "application/json")
             .body(serde_json::to_string(&serde_json::json!({
                 "resourceId": resource_id
             }))?)
@@ -185,6 +192,7 @@ impl BoursoWebClient {
         let url = get_cancel_order_url(&self.config)?;
         let response = self.client
             .post(url)
+            .header("Content-Type", "application/json")
             .body(serde_json::to_string(&serde_json::json!({
                 "accountKey": &account.id,
                 "reference": order_id
@@ -200,7 +208,7 @@ impl BoursoWebClient {
             return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
         }
 
-        println!("Order {} cancelled", order_id);
+        info!("Order {} successfully cancelled", order_id);
 
         Ok(())
     }
@@ -241,7 +249,7 @@ fn get_order_confirm_url(config: &Config) -> Result<String> {
     Ok(
         format!(
             "{}/ordersimple/confirm",
-            get_order_url(config)?
+            get_trading_base_url(config)?
         )
     )
 }
@@ -250,7 +258,7 @@ fn get_cancel_order_url(config: &Config) -> Result<String> {
     Ok(
         format!(
             "{}/orderdetail/cancel",
-            get_order_url(config)?
+            get_trading_base_url(config)?
         )
     )
 }
@@ -487,7 +495,7 @@ pub enum OrderKind {
     TradeAtLast,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default, clap::ValueEnum)]
 pub enum OrderSide {
     #[default]
     #[serde(rename = "B")]
@@ -549,8 +557,16 @@ pub struct OrderData {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderCheckResponse {
-    pub acceptability_messages: Option<Vec<Message>>,
+    pub acceptability_messages: Option<Vec<AcceptabilityMessage>>,
     pub check_order_data: OrderData,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptabilityMessage {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub content: String,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -569,13 +585,13 @@ pub struct FeesExplanation {
     pub start_amount: String,
     pub product_fee: String,
     pub service_fee: String,
-    pub scenarios: Vec<Message>,
+    pub scenarios: Vec<ScenarioMessage>,
     // pub translations: Translations,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Message {
+pub struct ScenarioMessage {
     pub title: String,
     pub content: Vec<Vec<String>>,
 }
