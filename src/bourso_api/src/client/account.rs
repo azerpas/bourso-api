@@ -3,9 +3,7 @@ use crate::{
     constants::{BASE_URL, SAVINGS_PATTERN, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN, ACCOUNT_PATTERN}
 };
 
-use super::{
-    BoursoWebClient,
-};
+use super::BoursoWebClient;
 
 use anyhow::Result;
 use regex::Regex;
@@ -104,6 +102,7 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
     Ok(accounts)
 }
 
+#[cfg(test)]
 mod tests {
     use crate::{client::account::extract_accounts, account::AccountKind};
 

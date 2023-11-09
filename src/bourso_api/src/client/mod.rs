@@ -5,19 +5,15 @@ pub mod virtual_pad;
 
 use std::sync::Arc;
 
-use anyhow::{Result, Context, bail};
+use anyhow::{Result, bail};
 use regex::Regex;
 use cookie_store::Cookie;
-use reqwest::Response;
 use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
 
 
 use self::config::{Config, extract_brs_config};
 
-use super::{
-    constants::{SAVINGS_PATTERN, ACCOUNT_PATTERN, BASE_URL, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN}, 
-    account::{Account, AccountKind},
-};
+use super::constants::BASE_URL;
 
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.

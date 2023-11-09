@@ -86,6 +86,7 @@ pub fn extract_brs_config(res: &str) -> Result<Config> {
     Ok(config)
 }
 
+#[cfg(test)]
 mod tests {
     const SCRIPT_CONFIG: &str = r#"<script src="/build/webpack.2f2df8ae5f6dea021fcd.js"></script><script>
     // json config

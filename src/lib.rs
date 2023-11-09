@@ -1,15 +1,17 @@
 use anyhow::{Result, Context};
-use bourso_api::{client::BoursoWebClient, get_client, account::{Account, AccountKind}};
+use bourso_api::{client::{BoursoWebClient, trade::order::OrderSide}, get_client, account::{Account, AccountKind}};
 use clap::ArgMatches;
+use log::info;
 
 mod settings;
 use settings::{Settings, get_settings, save_settings};
+mod validate;
 
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     match matches.subcommand() {
         // These matches require authentication
-        Some(("accounts", _)) | Some(("transactions", _)) | Some(("balance", _)) => {
-            println!("transactions");
+        Some(("accounts", _)) | Some(("transactions", _)) | Some(("balance", _)) | Some(("trade", _)) => {
+            ()
         }
         Some(("config", config_matches)) => {
             let customer_id = config_matches.get_one::<String>("username").map(|s| s.as_str()).unwrap();
@@ -53,11 +55,50 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
             } else {
                 accounts = web_client.get_accounts(None).await?;
             }
+
+            info!("{:#?}", accounts);
+        }
+
+        Some(("trade", trade_matches)) => {
+            accounts = web_client
+                .get_accounts(Some(AccountKind::Trading)).await?;
+
+            match trade_matches.subcommand() {
+                Some(("order", order_matches)) => {
+
+                    match order_matches.subcommand() {
+                        Some(("new", new_order_matches)) => {
+                            let account_id = new_order_matches
+                                .get_one::<String>("account").map(|s| s.as_str()).unwrap();
+                            
+                            // Get account from previously fetched accounts
+                            let account = accounts
+                                .iter()
+                                .find(|a| a.id == account_id)
+                                .context("Account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+
+                            let side = new_order_matches.get_one::<OrderSide>("side").unwrap();
+                            let quantity = new_order_matches.get_one::<usize>("quantity").unwrap();
+                            let symbol = new_order_matches.get_one::<String>("symbol").map(|s| s.as_str()).unwrap();
+
+                            let _ = web_client
+                                .order(
+                                    side.to_owned(), 
+                                    account, 
+                                    symbol, 
+                                    quantity.to_owned(), 
+                                    None
+                                ).await?;
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            
+            }
         }
         _ => unreachable!(),
     }
-
-    println!("{:#?}", accounts);
 
     Ok(())
 }

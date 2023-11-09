@@ -104,9 +104,10 @@ pub fn extract_challenge_token(res: &str) -> Result<String> {
     Ok(challenge_id.as_str().trim().to_string())
 }
 
+#[cfg(test)]
 mod tests {
     use super::{extract_data_matrix_keys, password_to_virtual_pad_keys, extract_challenge_token};
-    use crate::{client::BoursoWebClient};
+    use crate::client::BoursoWebClient;
 
     #[test]
     fn test_password_to_virtual_pad_keys() {
