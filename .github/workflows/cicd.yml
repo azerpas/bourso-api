@@ -68,5 +68,5 @@ jobs:
         with:
           files: |
             target/release/bourso-cli-linux
-            target/release/bourso-cli-darwin
+            target/release/bourso-cli-darwin.tar.gz
             target/release/bourso-cli.exe
