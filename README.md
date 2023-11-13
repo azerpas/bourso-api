@@ -10,8 +10,9 @@ A [GitHub issue follows the progress](https://github.com/azerpas/bourso-api/issu
 You can download the latest release [here](https://github.com/azerpas/bourso-api/releases).
 
 Choose the right binary for your OS between:
-- `bourso-cli-darwin` for MacOS
-- `bourso-cli-linux` for Linux
+- `bourso-cli-darwin.tar.gz` for MacOS. 
+    - After extracting the archive, right click on the binary and select "Open" to bypass MacOS app check.
+- `bourso-cli-linux.tar.gz` for Linux
 - `bourso-cli.exe` for Windows
 
 ⚠️ Signing in with a different IP address than the ones you usually use will trigger a security check from Bourso. You'll have to validate the connection from your phone. A [GitHub pull request](https://github.com/azerpas/bourso-api/pull/10) is open to handle this case.
