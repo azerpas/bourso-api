@@ -6,6 +6,7 @@ pub mod virtual_pad;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
+use log::{debug, info};
 use regex::Regex;
 use cookie_store::Cookie;
 use reqwest_cookie_store::{CookieStoreMutex, CookieStore};
@@ -128,7 +129,7 @@ impl BoursoWebClient {
 
         self.token = extract_token(&res)?;
         self.config = extract_brs_config(&res)?;
-        println!("Using version from {}", self.config.app_release_date);
+        debug!("Using version from {}", self.config.app_release_date);
 
         let res = self.client
             .get(format!("{BASE_URL}/connexion/clavier-virtuel?_hinclude=1"))
@@ -197,7 +198,7 @@ impl BoursoWebClient {
         if res.contains(r#"href="/se-deconnecter""#) {
             // Update the config with user hash
             self.config = extract_brs_config(&res)?;
-            println!("You are now logged in with user: {}", self.config.user_hash.as_ref().unwrap());
+            info!("🔓 You are now logged in with user: {}", self.config.user_hash.as_ref().unwrap());
         } else {
             bail!("Could not login to Bourso website");
         }

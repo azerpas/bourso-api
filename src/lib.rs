@@ -1,7 +1,7 @@
 use anyhow::{Result, Context};
 use bourso_api::{client::{BoursoWebClient, trade::order::OrderSide}, get_client, account::{Account, AccountKind}};
 use clap::ArgMatches;
-use log::info;
+use log::{info, warn};
 
 mod settings;
 use settings::{Settings, get_settings, save_settings};
@@ -16,7 +16,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         Some(("config", config_matches)) => {
             let customer_id = config_matches.get_one::<String>("username").map(|s| s.as_str()).unwrap();
             save_settings(&Settings { customer_id: Some(customer_id.to_string()) })?;
-            println!("Configuration saved");
+            info!("Configuration saved ✅");
             return Ok(());
         }
         _ => unreachable!(),
@@ -25,13 +25,20 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     let settings = get_settings()?;
 
     if settings.customer_id.is_none() {
-        println!("Please configure your customer id with `bourso config --username <customer_id>`");
+        warn!("Please configure your customer id with `bourso config --username <customer_id>`");
         return Ok(());
     }
     let customer_id = settings.customer_id.unwrap();
 
+    info!("Welcome to BoursoBank CLI 👋");
+    info!("Make sure you're running the latest version: {}", "https://github.com/azerpas/bourso-api/releases");
+    info!("We'll try to log you in with your customer id: {}", customer_id);
+    info!("If you want to change it, run `bourso config --username <customer_id>`");
+    println!("");
+    info!("We'll need your password to log you in. It will not be stored anywhere and will be asked everytime you run a command. The password will be hidden while typing.");
+
     // Get password from stdin
-    let password = rpassword::prompt_password("Your password: ")
+    let password = rpassword::prompt_password("Enter your password: ")
         .context("Failed to read password")?
         .trim()
         .to_string();
@@ -56,7 +63,8 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 accounts = web_client.get_accounts(None).await?;
             }
 
-            info!("{:#?}", accounts);
+            info!("Found {} accounts", accounts.len());
+            println!("{:#?}", accounts);
         }
 
         Some(("trade", trade_matches)) => {
