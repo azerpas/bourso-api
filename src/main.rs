@@ -1,3 +1,5 @@
+use std::env;
+
 use anyhow::Result;
 use bourso_api::client::trade::order::OrderSide;
 use clap::{Arg, Command, builder::ValueParser};
@@ -11,6 +13,7 @@ mod validate;
 async fn main() -> Result<()> {
     const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
 
+    env::set_var("RUST_LOG", "info");
     pretty_env_logger::init();
 
     let account_arg = Arg::new("account")
