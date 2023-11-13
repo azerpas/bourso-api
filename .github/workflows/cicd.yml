@@ -54,13 +54,15 @@ jobs:
       - name: Rename and make executabe Mac Release
         if: matrix.os == 'macos-latest'
         run: |
-          chmod -x target/release/bourso-cli
+          chmod +x target/release/bourso-cli
           mv target/release/bourso-cli target/release/bourso-cli-darwin
-          tar -czvf target/release/bourso-cli-darwin.tar.gz target/release/bourso-cli-darwin
+          tar -czvf target/release/bourso-cli-darwin.tar.gz -C target/release bourso-cli-darwin
 
       - name: Build Linux Release
         if: matrix.os == 'ubuntu-latest'
-        run: mv target/release/bourso-cli target/release/bourso-cli-linux
+        run: |
+          mv target/release/bourso-cli target/release/bourso-cli-linux
+          tar -czvf target/release/bourse-cli-linux.tar.gz -C target/release bourso-cli-linux
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
