@@ -70,4 +70,3 @@ jobs:
             target/release/bourso-cli-linux
             target/release/bourso-cli-darwin
             target/release/bourso-cli.exe
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
