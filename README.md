@@ -20,13 +20,13 @@ Choose the right binary for your OS between:
 ### Configuration
 Save your client ID with this config command:
 ```
-./bourso-cli-darwin config
+./bourso-cli config
 ```
 The password will be asked each time you run the app to avoid storing it in a file.
 
 ### Get your accounts
 ```
-./bourso-cli-darwin accounts
+./bourso-cli accounts
 ```
 You'll get something like this:
 ```
@@ -53,7 +53,7 @@ You'll get something like this:
 
 🛍️ Place a buy order for 4 shares of the ETF "1rTCW8" (AMUNDI MSCI WORLD UCITS ETF - EUR) on your account "a583f3c5842c34fb00b408486ef493e0":
 ```
-./bourso-cli-darwin trade order new --side buy --symbol 1rTCW8 --account a583f3c5842c34fb00b408486ef493e0 --quantity 4
+./bourso-cli trade order new --side buy --symbol 1rTCW8 --account a583f3c5842c34fb00b408486ef493e0 --quantity 4
 ```
 
 *Tip: You can get the ETF ID from the tracker URL, e.g. "AMUNDI MSCI WORLD UCITS ETF - EUR" url is https://www.boursorama.com/bourse/trackers/cours/1rTCW8/ (1rTCW8)*
