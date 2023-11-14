@@ -75,11 +75,11 @@ async fn main() -> Result<()> {
                 .about("Trade with your accounts")
                 .subcommand(
                     Command::new("order")
-                    .subcommand(
-                        Command::new("list")
-                            .about("List all your current orders")
-                            .arg(account_arg.clone())
-                    )
+                    // .subcommand(
+                    //    Command::new("list")
+                    //        .about("List all your current orders")
+                    //        .arg(account_arg.clone())
+                    // )
                     .subcommand(
                         Command::new("new")
                             .about("Place a new order")
@@ -109,11 +109,11 @@ async fn main() -> Result<()> {
                             // Validity date
                             // TODO: handle other types of orders
                     )
-                    .subcommand(
-                        Command::new("cancel")
-                            .about("Cancel an order")
-                            .arg(account_arg.clone())
-                    )
+                    // .subcommand(
+                    //    Command::new("cancel")
+                    //        .about("Cancel an order")
+                    //        .arg(account_arg.clone())
+                    // )
                     .subcommand_required(true)
                 )
                 .subcommand_required(true)
