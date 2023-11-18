@@ -57,3 +57,10 @@ You'll get something like this:
 ```
 
 *Tip: You can get the ETF ID from the tracker URL, e.g. "AMUNDI MSCI WORLD UCITS ETF - EUR" url is https://www.boursorama.com/bourse/trackers/cours/1rTCW8/ (1rTCW8)*
+
+## Security
+This app runs locally. All outbound/inbound data is sent/received to/from BoursoBank servers **only**. Your password will not be saved locally and will be asked each time you run the app. Your client ID has to be configurated and will be saved into the app data for next usages.
+
+## Disclaimer
+
+This script is provided as is, without any warranty. I am not responsible for any loss of funds. Use at your own risk. I am not affiliated with BoursoBank or any other project mentioned in this repository. This is not financial advice.
