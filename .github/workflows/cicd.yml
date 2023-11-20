@@ -5,8 +5,6 @@ on:
   push:    
     tags: 
       - v*.*.*
-  pull_request:    
-    branches: [ "main" ]
 
 permissions:
   contents: write
@@ -61,6 +59,12 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: tar -czvf target/release/bourso-cli-linux.tar.gz -C target/release bourso-cli
 
+      - name: Generate subject
+        id: hash
+        run: |
+          set -euo pipefail
+          echo "hashes=$(sha256sum target/release/bourso-cli | base64 -w0)" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
@@ -69,3 +73,14 @@ jobs:
             target/release/bourso-cli-linux.tar.gz
             target/release/bourso-cli-darwin.tar.gz
             target/release/bourso-cli.exe
+
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read # To read the workflow path.
+      id-token: write # To sign the provenance.
+      contents: write # To add assets to a release.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true # Optional: Upload to a new release
