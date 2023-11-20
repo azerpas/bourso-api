@@ -59,11 +59,22 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: tar -czvf target/release/bourso-cli-linux.tar.gz -C target/release bourso-cli
 
-      - name: Generate subject
-        id: hash
+      - name: Generate subject for Unix-like
+        if: matrix.os != 'windows-latest'
+        id: hash-unix
         run: |
           set -euo pipefail
           echo "hashes=$(sha256sum target/release/bourso-cli | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate subject for Windows
+        if: matrix.os == 'windows-latest'
+        id: hash-windows
+        run: |
+          # Stop script execution on errors (similar to set -e in Unix)
+          $ErrorActionPreference = "Stop"
+          $hash = Get-FileHash -Path "target/release/bourso-cli" -Algorithm SHA256
+          $base64Hash = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($hash.Hash))
+          echo "hashes=$base64Hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
