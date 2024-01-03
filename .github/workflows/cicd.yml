@@ -15,9 +15,9 @@ env:
 jobs:
   build:
     outputs:
-      hash-ubuntu: ${{ steps.hash.outputs.hash-ubuntu-latest }}
-      hash-macos: ${{ steps.hash.outputs.hash-macos-latest }}
-      hash-windows: ${{ steps.hash-windows.outputs.hash-windows-latest }}
+      hash-ubuntu-latest: ${{ steps.hash.outputs.hash-ubuntu-latest }}
+      hash-macos-latest: ${{ steps.hash.outputs.hash-macos-latest }}
+      hash-windows-latest: ${{ steps.hash-windows.outputs.hash-windows-latest }}
     strategy:
       fail-fast: false
       matrix:
