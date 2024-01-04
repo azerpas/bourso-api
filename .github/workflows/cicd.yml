@@ -104,5 +104,6 @@ jobs:
       contents: write # To add assets to a release.
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
     with:
+      provenance-name: provenance-id-${{ github.event.release.tag_name }}-${{ matrix.os }}.intoto.jsonl
       base64-subjects: "${{ needs.build.outputs[format('hash-{0}', matrix.os)] }}"
       upload-assets: true # Optional: Upload to a new release
