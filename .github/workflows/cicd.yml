@@ -68,7 +68,11 @@ jobs:
         id: hash
         run: |
           set -euo pipefail
-          echo "hash-${{ matrix.os }}=$(sha256sum target/release/bourso-cli | base64 -w0)" >> "$GITHUB_OUTPUT"
+          if [ ${{ matrix.os }} = "ubuntu-latest" ]; then
+            echo "hash-${{ matrix.os }}=$(sha256sum target/release/bourso-cli | base64 -w0)" >> "$GITHUB_OUTPUT"
+          elif [ ${{ matrix.os }} = "macos-latest" ]; then
+            echo "hash-${{ matrix.os }}=$(shasum -a 256 target/release/bourso-cli | awk '{print $1}' | base64)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Generate subject for Windows
         if: matrix.os == 'windows-latest'
