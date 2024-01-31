@@ -81,7 +81,8 @@ jobs:
           # Stop script execution on errors (similar to set -e in Unix)
           $ErrorActionPreference = "Stop"
           $hash = Get-FileHash -Path "target/release/bourso-cli.exe" -Algorithm SHA256
-          $base64Hash = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($hash.Hash))
+          $hashString = $hash.Hash.ToLower() + " target/release/bourso-cli.exe"
+          $base64Hash = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($hashString))
           echo "hash-windows-latest=$base64Hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Create GitHub Release
