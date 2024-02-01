@@ -12,10 +12,17 @@ A [GitHub issue follows the progress](https://github.com/azerpas/bourso-api/issu
 You can download the latest release [here](https://github.com/azerpas/bourso-api/releases).
 
 Choose the right binary for your OS between:
-- `bourso-cli-darwin.tar.gz` for MacOS. 
-    - After extracting the archive, right click on the binary and select "Open" to bypass MacOS app check.
+- `bourso-cli-darwin.tar.gz` for MacOS
 - `bourso-cli-linux.tar.gz` for Linux
 - `bourso-cli.exe` for Windows
+
+On MacOS, make sure to make the file is executable:
+```sh
+chmod +x bourso-cli
+# if it still says `Permission denied`, try
+chown 777 bourso-cli
+```
+If you then get a `"bourso-cli" cannot be opened because the developer cannot be verified` error, go to `System Preferences > Security & Privacy > General` and click `Open Anyway`
 
 ⚠️ Signing in with a different IP address than the ones you usually use will trigger a security check from Bourso. You'll have to validate the connection from your phone. A [GitHub pull request](https://github.com/azerpas/bourso-api/pull/10) is open to handle this case.
 
@@ -72,6 +79,58 @@ You'll get something like this:
 ```
 
 *Tip: You can get the ETF ID from the tracker URL, e.g. "AMUNDI MSCI WORLD UCITS ETF - EUR" url is https://www.boursorama.com/bourse/trackers/cours/1rTCW8/ (1rTCW8)*
+
+### DCA (Dollar Cost Averaging) investing
+
+You can use this script to do DCA investing. For example, if you want to buy 1 share of the ETF "1rTCW8" (AMUNDI MSCI WORLD UCITS ETF - EUR) every month, you can use a cron job to run the script every month.
+
+#### With MacOS
+You can use the `launchd` daemon to run the script every week. Create a file named `com.bourso-cli.plist` in `~/Library/LaunchAgents/` with the following content:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.azerpas.bourso-cli</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOUR_USER/bourso-launchd.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer> <!-- Run the script every Monday -->
+        <key>Hour</key>
+        <integer>20</integer> <!-- Run the script at 08:00 PM -->
+        <key>Minute</key>
+        <integer>00</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/> <!-- Run the script when the agent is loaded, i.e., when the system starts -->
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USER/bourso-launchd-cli-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USER/bourso-launchd-cli-stderr.log</string>
+</dict>
+</plist>
+```
+Replace `YOUR_USER` with your username.
+
+Then copy the `bourso-launchd.sh` script in your home directory, modify the variables and make it executable.
+```sh
+chmod +x bourso-launchd.sh
+chown 777 bourso-launchd.sh
+```
+Finally, load the agent with the following command:
+```sh
+launchctl load ~/Library/LaunchAgents/com.bourso-cli.plist
+```
+The script will now run every week at 08:00 PM on Monday. You can check the logs in `~/bourso-launchd-cli-stdout.log` and `~/bourso-launchd-cli-stderr.log`.
+#### With Linux
+TODO
+#### With Windows
+TODO
 
 ## Security
 This app runs locally. All outbound/inbound data is sent/received to/from BoursoBank servers **only**. Your password will not be saved locally and will be asked each time you run the app. Your client ID has to be configurated and will be saved into the app data for next usages.
