@@ -83,6 +83,7 @@ impl BoursoWebClient {
     /// # Returns
     /// 
     /// The login page content as a string.
+    #[cfg(not(tarpaulin_include))]
     async fn get_login_page(&self) -> Result<String> {
         Ok(
             self.client
@@ -100,6 +101,7 @@ impl BoursoWebClient {
     /// # Returns
     /// 
     /// Nothing if the session was initialized successfully, an error otherwise.
+    #[cfg(not(tarpaulin_include))]
     pub async fn init_session(&mut self) -> Result<()> {
         // This first call is necessary to get the __brs_mit cookie
         let init_res = self.get_login_page().await?;
@@ -158,6 +160,7 @@ impl BoursoWebClient {
     /// # Returns
     /// 
     /// Nothing if the login was successful, an error otherwise.
+    #[cfg(not(tarpaulin_include))]
     pub async fn login(&mut self, customer_id: &str, password: &str) -> Result<()> {
         self.customer_id = customer_id.to_string();
         self.password = virtual_pad::password_to_virtual_pad_keys(
@@ -241,6 +244,13 @@ fn extract_token(res: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_get_headers() {
+        let client = BoursoWebClient::new();
+        let headers = client.get_headers();
+        assert_eq!(headers.get("user-agent").unwrap().to_str().unwrap(), "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36");
+    }
 
     #[test]
     fn test_extract_brs_mit_cookie() {

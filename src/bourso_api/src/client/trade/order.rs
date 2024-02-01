@@ -19,6 +19,7 @@ impl BoursoWebClient {
     /// * `symbol` - Symbol to trade
     /// * `quantity` - Quantity to trade
     /// * `order_data` - Order data. If not set, will be fetched from Bourso API and filled with the given parameters
+    #[cfg(not(tarpaulin_include))]
     pub async fn order(&self, side: OrderSide, account: &Account, symbol: &str, quantity: usize, order_data: Option<OrderData>) -> Result<String> {
 
         if account.kind != AccountKind::Trading {
@@ -77,8 +78,8 @@ impl BoursoWebClient {
         self.check(&order_data).await?;
 
         let response = self.confirm(&order_data.resource_id.as_ref().unwrap()).await?;
-
-        info!("Order passed with ID: {}", response.order_id);
+        
+        info!("Order for {} {} successfully passed with ID {} ✅", quantity, symbol, response.order_id);
 
         Ok(response.order_id)
     }   
@@ -95,6 +96,7 @@ impl BoursoWebClient {
     /// # Returns 
     /// 
     /// An order prepare response
+    #[cfg(not(tarpaulin_include))]
     async fn prepare(&self, account: &Account, symbol: &str) -> Result<OrderPrepareResponse> {
         let url = get_order_prepare_url(&self.config, account, symbol)?;
         let response = self.client
@@ -125,6 +127,7 @@ impl BoursoWebClient {
     /// # Returns
     /// 
     /// An order check response
+    #[cfg(not(tarpaulin_include))]
     async fn check(&self, data: &OrderData) -> Result<OrderCheckResponse> {
         let url = get_order_check_url(&self.config)?;
         let response = self.client
@@ -157,6 +160,7 @@ impl BoursoWebClient {
     /// # Returns
     /// 
     /// An order confirm response
+    #[cfg(not(tarpaulin_include))]
     async fn confirm(&self, resource_id: &str) -> Result<OrderConfirmResponse> {
         let url = get_order_confirm_url(&self.config)?;
         let response = self.client
@@ -188,6 +192,7 @@ impl BoursoWebClient {
     /// 
     /// * `account` - Account to use. Must be a trading account
     /// * `order_id` - ID of the order to cancel
+    #[cfg(not(tarpaulin_include))]
     pub async fn cancel_order(&self, account: &Account, order_id: &str) -> Result<()> {
         let url = get_cancel_order_url(&self.config)?;
         let response = self.client
