@@ -31,7 +31,8 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     let customer_id = settings.customer_id.unwrap();
 
     info!("Welcome to BoursoBank CLI 👋");
-    info!("Make sure you're running the latest version: {}", "https://github.com/azerpas/bourso-api/releases");
+    info!("ℹ️ Version {}. Make sure you're running the latest version: {}", env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_REPOSITORY"));
+    println!("");
     info!("We'll try to log you in with your customer id: {}", customer_id);
     info!("If you want to change it, run `bourso config --username <customer_id>`");
     println!("");
