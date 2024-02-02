@@ -1,6 +1,7 @@
 # Bourso CLI
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/azerpas/bourso-api/badge)](https://securityscorecards.dev/viewer/?uri=github.com/azerpas/bourso-api)
+[![codecov](https://codecov.io/gh/azerpas/bourso-api/graph/badge.svg?token=I47J55VCB3)](https://codecov.io/gh/azerpas/bourso-api)
 
 This app aims to be a simple CLI powered by *[Bourso API](./src/bourso_api/)* to log in to your [BoursoBank/Boursorama](https://www.boursorama.com) account and achieve some basic tasks.
 
