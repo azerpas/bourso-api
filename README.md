@@ -3,6 +3,9 @@
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/azerpas/bourso-api/badge)](https://securityscorecards.dev/viewer/?uri=github.com/azerpas/bourso-api)
 [![codecov](https://codecov.io/gh/azerpas/bourso-api/graph/badge.svg?token=I47J55VCB3)](https://codecov.io/gh/azerpas/bourso-api)
 
+<img width="1264" alt="Screenshot of Bourso CLI" src="https://github.com/azerpas/bourso-api/assets/19282069/9ddbc5aa-7e52-4ab3-8a86-b15bd2328b67">
+
+
 This app aims to be a simple CLI powered by *[Bourso API](./src/bourso_api/)* to log in to your [BoursoBank/Boursorama](https://www.boursorama.com) account and achieve some basic tasks.
 
 The first goal is to be able to [DCA (Dollar Cost Average)](https://www.investopedia.com/terms/d/dollarcostaveraging.asp) on given [ETFs (Exchange Traded Funds)](https://www.investopedia.com/terms/e/etf.asp) on a regular basis with your Bourso account.
