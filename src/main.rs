@@ -2,7 +2,7 @@ use std::env;
 
 use anyhow::Result;
 use bourso_api::client::trade::order::OrderSide;
-use clap::{Arg, Command, builder::ValueParser};
+use clap::{builder::{PossibleValue, ValueParser}, Arg, Command};
 
 use validate::validate_account_id;
 
@@ -117,6 +117,59 @@ async fn main() -> Result<()> {
                     .subcommand_required(true)
                 )
                 .subcommand_required(true)
+        )
+        .subcommand(
+            Command::new("quote")
+                .about("Get quote details for a given symbol over a timeframe. This action does not require authentication")
+                // subcommand highest value etc...
+                .arg(
+                    Arg::new("symbol")
+                    .long("symbol")
+                    .help("The symbol id of the stock (e.g: '1rTCW8')")
+                    .required(true)
+                )
+                .arg(
+                    Arg::new("length")
+                    .long("length")
+                    .help("The length period of the stock (e.g: '30' or '1M' for 30 days)")
+                    .default_value("30")
+                    .value_parser([
+                        PossibleValue::new("1").help("1 day"),
+                        PossibleValue::new("5").help("5 days"),
+                        PossibleValue::new("30").help("30 days or 1 month"),
+                        PossibleValue::new("90").help("90 days or 3 months"),
+                        PossibleValue::new("180").help("180 days or 6 months"),
+                        PossibleValue::new("365").help("365 days or 1 year"),
+                        PossibleValue::new("1825").help("1825 days or 5 years"),
+                        PossibleValue::new("3650").help("3650 days or 10 years"),
+                    ])
+                )
+                .arg(
+                    Arg::new("interval")
+                    .long("interval")
+                    .help("The interval of the stock (e.g: '0' for default interval)")
+                    .default_value("0")
+                    .value_parser([
+                        PossibleValue::new("0").help("Default interval")
+                        // TODO: add other intervals by documenting them on Boursorama
+                    ])
+                )
+                .subcommand(
+                    Command::new("highest")
+                        .about("Get the highest value of the stock for the given period (length) and interval")
+                )
+                .subcommand(
+                    Command::new("lowest")
+                        .about("Get the lowest value of the stock for the given period (length) and interval")
+                )
+                .subcommand(
+                    Command::new("average")
+                        .about("Get the average value of the stock for the given period (length) and interval")
+                )
+                .subcommand(
+                    Command::new("volume")
+                        .about("Get the volume of the stock for the given period (length) and interval")
+                )
         )
         .get_matches();
 
