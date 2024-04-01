@@ -8,31 +8,65 @@ use settings::{Settings, get_settings, save_settings};
 mod validate;
 
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
+    let settings = get_settings()?;
+    
+    info!("Welcome to BoursoBank CLI 👋");
+    info!("ℹ️ - Version {}. Make sure you're running the latest version: {}", env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_REPOSITORY"));
+    println!("");
+
     match matches.subcommand() {
-        // These matches require authentication
-        Some(("accounts", _)) | Some(("transactions", _)) | Some(("balance", _)) | Some(("trade", _)) => {
-            ()
-        }
+        // These matches do not require authentication
         Some(("config", config_matches)) => {
             let customer_id = config_matches.get_one::<String>("username").map(|s| s.as_str()).unwrap();
             save_settings(&Settings { customer_id: Some(customer_id.to_string()) })?;
             info!("Configuration saved ✅");
             return Ok(());
         }
+        Some(("quote", quote_matches)) => {
+            info!("Fetching quotes...");
+            
+            let symbol = quote_matches.get_one::<String>("symbol").map(|s| s.as_str()).unwrap();
+            let length = quote_matches.get_one::<String>("length").map(|s| s.as_str()).unwrap();
+            let interval = quote_matches.get_one::<String>("interval").map(|s| s.as_str()).unwrap();
+            let web_client: BoursoWebClient = get_client();
+            let quotes = web_client.get_ticks(symbol, length.parse()?, interval.parse()?).await?;
+
+            match quote_matches.subcommand() {
+                Some(("highest", _)) => {
+                    info!("Highest quote: {:#?}", quotes.d.get_highest_value());
+                },
+                Some(("lowest", _)) => {
+                    info!("Lowest quote: {:#?}", quotes.d.get_lowest_value());
+                },
+                Some(("volume", _)) => {
+                    info!("Volume: {:#?}", quotes.d.get_volume());
+                },
+                Some(("average", _)) => {
+                    info!("Average quote: {:#?}", quotes.d.get_average_value());
+                },
+                _ => {
+                    info!("Quotes:");
+                    for quote in quotes.d.quote_tab.iter() {
+                        info!("Quote day {}: Close: {}, Open: {}, High: {}, Low: {}, Volume: {}", quote.date, quote.close, quote.open, quote.high, quote.low, quote.volume);
+                    }
+                }
+            }
+            
+            return Ok(());
+        }
+        // These matches require authentication
+        Some(("accounts", _)) | Some(("transactions", _)) | Some(("balance", _)) | Some(("trade", _)) => {
+            ()
+        }
         _ => unreachable!(),
     }
-
-    let settings = get_settings()?;
 
     if settings.customer_id.is_none() {
         warn!("Please configure your customer id with `bourso config --username <customer_id>`");
         return Ok(());
     }
     let customer_id = settings.customer_id.unwrap();
-
-    info!("Welcome to BoursoBank CLI 👋");
-    info!("ℹ️ Version {}. Make sure you're running the latest version: {}", env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_REPOSITORY"));
-    println!("");
+    
     info!("We'll try to log you in with your customer id: {}", customer_id);
     info!("If you want to change it, run `bourso config --username <customer_id>`");
     println!("");
