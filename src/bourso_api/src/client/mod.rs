@@ -66,6 +66,7 @@ impl BoursoWebClient {
     /// # Returns
     /// 
     /// The headers as a `reqwest::header::HeaderMap`.
+    #[cfg(not(tarpaulin_include))]
     fn get_headers(&self) -> reqwest::header::HeaderMap {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
