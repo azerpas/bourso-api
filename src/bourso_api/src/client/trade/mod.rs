@@ -1,5 +1,6 @@
 pub mod error;
 pub mod order;
+pub mod tick;
 
 use anyhow::Result;
 
