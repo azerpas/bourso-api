@@ -1,5 +1,5 @@
 use anyhow::{Result, Context};
-use bourso_api::{client::{BoursoWebClient, trade::order::OrderSide}, get_client, account::{Account, AccountKind}};
+use bourso_api::{account::{Account, AccountKind}, client::{trade::{order::OrderSide, tick::QuoteTab}, BoursoWebClient}, get_client};
 use clap::ArgMatches;
 use log::{info, warn};
 
@@ -24,11 +24,12 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         }
         Some(("quote", quote_matches)) => {
             info!("Fetching quotes...");
-            
+
             let symbol = quote_matches.get_one::<String>("symbol").map(|s| s.as_str()).unwrap();
             let length = quote_matches.get_one::<String>("length").map(|s| s.as_str()).unwrap();
             let interval = quote_matches.get_one::<String>("interval").map(|s| s.as_str()).unwrap();
             let web_client: BoursoWebClient = get_client();
+
             let quotes = web_client.get_ticks(symbol, length.parse()?, interval.parse()?).await?;
 
             match quote_matches.subcommand() {
@@ -43,6 +44,18 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 },
                 Some(("average", _)) => {
                     info!("Average quote: {:#?}", quotes.d.get_average_value());
+                },
+                Some(("last", _)) => {
+                    let quote: QuoteTab;
+
+                    let last_quote = quotes.d.get_last_quote();
+                    if last_quote.is_some() {
+                        quote = last_quote.unwrap();
+                    } else {
+                        quote = quotes.d.quote_tab.last().unwrap().clone();
+                    }
+
+                    info!("Last quote: current: {}, open: {}, high: {}, low: {}, volume: {}", quote.close, quote.open, quote.high, quote.low, quote.volume);
                 },
                 _ => {
                     info!("Quotes:");
@@ -82,7 +95,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     web_client.init_session().await?;
     web_client.login(&customer_id, &password).await?;
 
-    let mut accounts: Vec<Account> = vec![];
+    let accounts: Vec<Account>;
 
     match matches.subcommand() {
         Some(("accounts", sub_matches)) => {

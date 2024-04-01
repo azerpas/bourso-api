@@ -170,6 +170,10 @@ async fn main() -> Result<()> {
                     Command::new("volume")
                         .about("Get the volume of the stock for the given period (length) and interval")
                 )
+                .subcommand(
+                    Command::new("last")
+                        .about("Get the last value of the stock. Sets the `length` to 1 day and `interval` to 0")
+                )
         )
         .get_matches();
 
