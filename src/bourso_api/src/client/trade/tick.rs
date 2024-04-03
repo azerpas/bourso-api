@@ -304,5 +304,8 @@ mod tests {
         assert_eq!(response.d.get_lowest_value(), 29.1);
         assert_eq!(response.d.get_average_value(), 29.618210526315796);
         assert_eq!(response.d.get_volume(), 485117);
+        assert_eq!(response.d.get_last_quote(), None);
+        assert_eq!(response.d.get_second_to_last_quote(), None);
+        assert_eq!(response.d.get_quotes().len(), 19);
     }
 }

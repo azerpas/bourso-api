@@ -7,6 +7,7 @@ mod settings;
 use settings::{Settings, get_settings, save_settings};
 mod validate;
 
+#[cfg(not(tarpaulin_include))]
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     let settings = get_settings()?;
     
