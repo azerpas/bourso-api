@@ -5,7 +5,8 @@ use crate::{
 
 use super::BoursoWebClient;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use log::debug;
 use regex::Regex;
 
 impl BoursoWebClient {
@@ -35,10 +36,10 @@ impl BoursoWebClient {
             // all accounts
             _ => {
                 [
-                    extract_accounts(&res, AccountKind::Savings)?,
-                    extract_accounts(&res, AccountKind::Banking)?,
-                    extract_accounts(&res, AccountKind::Trading)?,
-                    extract_accounts(&res, AccountKind::Loans)?,
+                    extract_accounts(&res, AccountKind::Savings).unwrap_or(Vec::new()),
+                    extract_accounts(&res, AccountKind::Banking).unwrap_or(Vec::new()),
+                    extract_accounts(&res, AccountKind::Trading).unwrap_or(Vec::new()),
+                    extract_accounts(&res, AccountKind::Loans).unwrap_or(Vec::new()),
                 ].concat()
             },
         };
@@ -58,9 +59,12 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
     )?;
     let accounts_ul = regex
         .captures(&res)
-        .unwrap()
+        .with_context(|| {
+            debug!("Response: {}", res);
+            format!("Failed to extract {:?} accounts from the response", kind)
+        })?
         .get(1)
-        .unwrap()
+        .context("Failed to extract accounts from regex match")?
         .as_str();
 
     let account_regex = Regex::new(ACCOUNT_PATTERN)?;
