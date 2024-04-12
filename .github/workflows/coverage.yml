@@ -17,6 +17,6 @@ jobs:
           cargo +nightly tarpaulin --verbose --packages bourso_api --timeout 120 --out xml
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v4.3.0
         with:
           fail_ci_if_error: true
