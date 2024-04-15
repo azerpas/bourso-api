@@ -8,10 +8,9 @@
 
 This app aims to be a simple CLI powered by *[Bourso API](./src/bourso_api/)* to log in to your [BoursoBank/Boursorama](https://www.boursorama.com) account and achieve some basic tasks.
 
-The first goal is to be able to [DCA (Dollar Cost Average)](https://www.investopedia.com/terms/d/dollarcostaveraging.asp) on given [ETFs (Exchange Traded Funds)](https://www.investopedia.com/terms/e/etf.asp) on a regular basis with your Bourso account.
+The first goal of this project was creating an automated [DCA (Dollar Cost Average)](https://www.investopedia.com/terms/d/dollarcostaveraging.asp) solution to buy [ETFs (Exchange Traded Funds)](https://www.investopedia.com/terms/e/etf.asp) on a regular basis with your Bourso account.
 
-A [GitHub issue follows the progress](https://github.com/azerpas/bourso-api/issues/1).
-
+[Follow these instructions](#dca-dollar-cost-averaging-investing) to setup your own automated DCA.
 ## Usage
 You can download the latest release [here](https://github.com/azerpas/bourso-api/releases).
 
@@ -134,7 +133,15 @@ The script will now run every week at 08:00 PM on Monday. You can check the logs
 #### With Linux
 TODO
 #### With Windows
-TODO
+Copy/paste the following commands and replace the path with the actual location of `bourso-cli.exe`. Then paste the commands to Powershell.
+```ps1
+# Create a new task trigger that will run weekly on Sunday at 1:00pm 
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 1:00PM
+# Create a new task action that will execute the trade based on the trigger defined above
+$action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoExit -Command `"& { `$exePath = 'C:\Path\To\bourso-cli.exe'; `$arguments = 'trade order new --side buy --symbol 1rTCW8 --account a583f3c5842c34fb00b408486ef493e0 --quantity 4'; Start-Process -FilePath `$exePath -ArgumentList `$arguments -NoNewWindow -Wait }`""
+# Create a task named "Weekly Bourso CLI Task"
+Register-ScheduledTask -TaskName "Weekly Bourso CLI Task" -Trigger $trigger -Action $action
+```
 
 ## Security
 This app runs locally. All outbound/inbound data is sent/received to/from BoursoBank servers **only**. Your password will not be saved locally and will be asked each time you run the app. Your client ID has to be configurated and will be saved into the app data for next usages.
