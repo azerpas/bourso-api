@@ -47,6 +47,30 @@ pub fn save_settings(settings: &Settings) -> Result<()> {
 
 #[cfg(not(tarpaulin_include))]
 pub fn init_logger() -> Result<()> {
+    use std::env;
+
+    use log::debug;
+
+    let log_level = match env::var("RUST_LOG") {
+        Ok(level) => match level.as_str() {
+            "trace" => LevelFilter::Trace,
+            "debug" => LevelFilter::Debug,
+            "info" => LevelFilter::Info,
+            "warn" => LevelFilter::Warn,
+            "error" => LevelFilter::Error,
+            _ => {
+                env::set_var("RUST_LOG", "info");
+                LevelFilter::Info
+            }
+        },
+        Err(_) => {
+            env::set_var("RUST_LOG", "info");
+            LevelFilter::Info
+        }
+    };
+
+    debug!("Log level: {:?}", log_level);
+
     // Create the .bourso directory if it doesn't exist
     let user_dirs = UserDirs::new().context("Failed to get user directories")?;
     let mut path = user_dirs.home_dir().to_path_buf();
@@ -55,7 +79,6 @@ pub fn init_logger() -> Result<()> {
     fs::create_dir_all(&path)?;
     path = path.join("bourso.log");
 
-    let level = LevelFilter::Info;
     let stderr = ConsoleAppender::builder()
         .target(Target::Stderr)
         .encoder(Box::new(PatternEncoder::new("{h({l})}  {M} > {m}{n}")))
@@ -70,7 +93,7 @@ pub fn init_logger() -> Result<()> {
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
         .appender(
             Appender::builder()
-                .filter(Box::new(ThresholdFilter::new(level)))
+                .filter(Box::new(ThresholdFilter::new(log_level)))
                 .build("stderr", Box::new(stderr)),
         )
         .build(
@@ -84,4 +107,30 @@ pub fn init_logger() -> Result<()> {
     log4rs::init_config(config)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use log::LevelFilter;
+
+    #[test]
+    fn test_get_settings() {
+        let f = match env::var("RUST_LOG") {
+            Ok(level) => match level.as_str() {
+                "trace" => LevelFilter::Trace,
+                "debug" => LevelFilter::Debug,
+                "info" => LevelFilter::Info,
+                "warn" => LevelFilter::Warn,
+                "error" => LevelFilter::Error,
+                _ => LevelFilter::Info,
+            },
+            Err(_) => {
+                env::set_var("RUST_LOG", "info");
+                LevelFilter::Info
+            }
+        }; 
+        assert_eq!(f, LevelFilter::Info);
+    }
 }
