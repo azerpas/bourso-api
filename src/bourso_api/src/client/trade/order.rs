@@ -113,7 +113,7 @@ impl BoursoWebClient {
         }
 
         let response: OrderPrepareResponse = serde_json::from_str(&response)
-            .context("Failed to parse order prepare response")?;
+            .context(format!("Failed to parse order prepare response. Response: {}", response))?;
         
         Ok(response)
     }
@@ -146,7 +146,7 @@ impl BoursoWebClient {
         }
 
         let response: OrderCheckResponse = serde_json::from_str(&response)
-            .context("Failed to parse order check response")?;
+            .context(format!("Failed to parse order check response. Response: {}", response))?;
         
         Ok(response)
     }
@@ -177,11 +177,11 @@ impl BoursoWebClient {
         let response = response.text().await?;
 
         if status_code != 201 {
-            return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
+            return Err(anyhow::anyhow!("Failed to get order confirm response: {}", response));
         }
 
         let response: OrderConfirmResponse = serde_json::from_str(&response)
-            .context("Failed to parse order prepare response")?;
+            .context(format!("Failed to parse order confirm response. Response: {}", response))?;
 
         Ok(response)
     }
