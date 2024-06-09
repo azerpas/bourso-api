@@ -620,21 +620,21 @@ pub struct ActionMessage {
     pub title: Value,
     pub body: Value,
     pub params: Value,
-    pub category: String,
+    pub category: Value,
     pub actions: Vec<Action>,
     pub flags: Vec<Value>,
     pub targets: Vec<Value>,
     pub visual_id: Value,
-    pub visual_theme: String,
+    pub visual_theme: Value,
     pub medias: Vec<Value>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Action {
-    pub label: String,
-    pub feature_id: String,
-    pub web: String,
+    pub label: Value,
+    pub feature_id: Value,
+    pub web: Value,
     pub api: ActionApi,
     pub disabled: bool,
 }
@@ -642,8 +642,8 @@ pub struct Action {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionApi {
-    pub href: String,
-    pub method: String,
+    pub href: Value,
+    pub method: Value,
     pub params: ActionApiParams,
 }
 
