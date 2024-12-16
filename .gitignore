@@ -1,6 +1,8 @@
 *.chls
 
+# nix
+/result
+.direnv/
 
-# Added by cargo
-
+# rust
 /target
