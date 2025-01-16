@@ -372,13 +372,13 @@ pub struct Details {
     pub first_cash_transfer_date: String,
     /// Gain/Losses in as a float value
     pub gain_losses_percent: f64,
-    pub done_gain_losses_percent: i64,
+    pub done_gain_losses_percent: f64,
     /// Current cash balance
-    pub cash: String,
+    pub cash: f64,
     /// Current gain/losses in euros
     pub gain_losses: f64,
-    pub done_gain_losses: i64,
-    pub clearance_balance: i64,
+    pub done_gain_losses: f64,
+    pub clearance_balance: f64,
     /// The account stocks value in euros
     pub stocks: f64,
     /// Today's date in format "2022-11-01"
