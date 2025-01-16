@@ -1,6 +1,6 @@
 [package]
 name = "bourso-cli"
-version = "0.1.6"
+version = "0.1.10"
 edition = "2021"
 repository = "https://github.com/azerpas/bourso-api"
 
