@@ -9,7 +9,16 @@ mod validate;
 
 #[cfg(not(tarpaulin_include))]
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
-    let settings = get_settings()?;
+    use log::debug;
+
+    let settings = match matches.get_one::<String>("credentials") {
+        Some(credentials_path) => {
+            Settings::load(credentials_path)?
+        }
+        None => {
+            get_settings()?
+        }
+    };
     
     info!("Welcome to BoursoBank CLI 👋");
     info!("ℹ️ - Version {}. Make sure you're running the latest version: {}", env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_REPOSITORY"));
@@ -19,7 +28,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         // These matches do not require authentication
         Some(("config", config_matches)) => {
             let customer_id = config_matches.get_one::<String>("username").map(|s| s.as_str()).unwrap();
-            save_settings(&Settings { customer_id: Some(customer_id.to_string()) })?;
+            save_settings(&Settings { customer_id: Some(customer_id.to_string()), password: None })?;
             info!("Configuration saved ✅");
             return Ok(());
         }
@@ -87,10 +96,15 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     info!("We'll need your password to log you in. It will not be stored anywhere and will be asked everytime you run a command. The password will be hidden while typing.");
 
     // Get password from stdin
-    let password = rpassword::prompt_password("Enter your password: ")
-        .context("Failed to read password")?
-        .trim()
-        .to_string();
+    let password = match settings.password {
+        Some(password) => password,
+        None => { 
+            rpassword::prompt_password("Enter your password: ")
+                .context("Failed to read password")?
+                .trim()
+                .to_string()
+        }
+    };
 
     let mut web_client: BoursoWebClient = get_client();
     web_client.init_session().await?;
