@@ -8,7 +8,27 @@ use log4rs::{append::{console::{ConsoleAppender, Target}, file::FileAppender}, c
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
+    #[serde(rename = "clientId")]
     pub customer_id: Option<String>,
+    #[serde(rename = "password")]
+    pub password: Option<String>,
+}
+
+#[cfg(not(tarpaulin_include))]
+impl Settings {
+    pub fn load(path: &str) -> Result<Settings> {
+        let file_content = match fs::read_to_string(path) {
+            Ok(data) => data,
+            Err(_) => {
+                return Err(anyhow::anyhow!("Failed to read settings file"));
+            },
+        };
+
+        let settings: Settings = serde_json::from_str(&file_content)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize settings: {}\nPlease make sure the settings file is valid.", e))?;
+
+        Ok(settings)
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -20,8 +40,8 @@ pub fn get_settings() -> Result<Settings> {
         Ok(data) => data,
         Err(_) => {
             // Create the settings file if it doesn't exist
-            save_settings(&Settings { customer_id: None })?;
-            return Ok(Settings { customer_id: None });
+            save_settings(&Settings { customer_id: None, password: None })?;
+            return Ok(Settings { customer_id: None, password: None });
         },
     };
 

@@ -176,6 +176,13 @@ async fn main() -> Result<()> {
                         .about("Get the last value of the stock. Sets the `length` to 1 day and `interval` to 0")
                 )
         )
+        .arg(
+            Arg::new("credentials")
+                .long("credentials")
+                .help("The path to the credentials file")
+                .value_parser(clap::value_parser!(String))
+                .required(false)
+        )
         .get_matches();
 
     bourso_cli::parse_matches(matches).await?;
