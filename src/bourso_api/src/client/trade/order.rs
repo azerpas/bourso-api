@@ -1,27 +1,37 @@
+use anyhow::{Context, Result};
 use log::{debug, info};
-use serde::{Serialize, Deserialize};
-use anyhow::{Result, Context};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    account::{Account, AccountKind}, client::config::Config, 
+    account::{Account, AccountKind},
+    client::config::Config,
 };
 
-use super::{BoursoWebClient, get_trading_base_url};
+use super::{get_trading_base_url, BoursoWebClient};
 
 impl BoursoWebClient {
     /// Place an order
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `side` - Order side (buy or sell)
     /// * `account` - Account to use. Must be a trading account
     /// * `symbol` - Symbol to trade
     /// * `quantity` - Quantity to trade
     /// * `order_data` - Order data. If not set, will be fetched from Bourso API and filled with the given parameters
+    ///
+    /// # Returns
+    /// Order ID and order price limit
     #[cfg(not(tarpaulin_include))]
-    pub async fn order(&self, side: OrderSide, account: &Account, symbol: &str, quantity: usize, order_data: Option<OrderData>) -> Result<String> {
-
+    pub async fn order(
+        &self,
+        side: OrderSide,
+        account: &Account,
+        symbol: &str,
+        quantity: usize,
+        order_data: Option<OrderData>,
+    ) -> Result<(String, Option<f64>)> {
         if account.kind != AccountKind::Trading {
             return Err(anyhow::anyhow!("Account is not a trading account"));
         }
@@ -64,73 +74,78 @@ impl BoursoWebClient {
             order_data.order_expiration_date = response.prefill_order_data.order_validity;
         } else {
             // Set order_data.order_expiration_date to today
-            order_data.order_expiration_date = Some(
-                chrono::Utc::now()
-                .format("%Y-%m-%d")
-                .to_string()
-            );
+            order_data.order_expiration_date =
+                Some(chrono::Utc::now().format("%Y-%m-%d").to_string());
         }
 
         order_data.resource_id = Some(response.resource_id);
 
         debug!("Order data: {:#?}", order_data);
-        
+
         self.check(&order_data).await?;
 
-        let response = self.confirm(&order_data.resource_id.as_ref().unwrap()).await?;
-        
-        info!("Order for {} {} successfully passed with ID {} ✅", quantity, symbol, response.order_id);
+        let response = self
+            .confirm(&order_data.resource_id.as_ref().unwrap())
+            .await?;
 
-        Ok(response.order_id)
-    }   
+        info!(
+            "Order for {} {} successfully passed with ID {} ✅",
+            quantity, symbol, response.order_id
+        );
+
+        Ok((response.order_id, order_data.order_price_limit))
+    }
 
     /// Prepare an order
-    /// 
+    ///
     /// This will fetch trading data for the given symbol
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `account` - Account to use. Must be a trading account
     /// * `symbol` - Symbol to trade
-    /// 
-    /// # Returns 
-    /// 
+    ///
+    /// # Returns
+    ///
     /// An order prepare response
     #[cfg(not(tarpaulin_include))]
     async fn prepare(&self, account: &Account, symbol: &str) -> Result<OrderPrepareResponse> {
         let url = get_order_prepare_url(&self.config, account, symbol)?;
-        let response = self.client
-            .get(url)
-            .send()
-            .await?;
+        let response = self.client.get(url).send().await?;
 
         let status_code = response.status();
 
         let response = response.text().await?;
 
         if status_code != 200 {
-            return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
+            return Err(anyhow::anyhow!(
+                "Failed to get order prepare response: {}",
+                response
+            ));
         }
 
-        let response: OrderPrepareResponse = serde_json::from_str(&response)
-            .context(format!("Failed to parse order prepare response. Response: {}", response))?;
-        
+        let response: OrderPrepareResponse = serde_json::from_str(&response).context(format!(
+            "Failed to parse order prepare response. Response: {}",
+            response
+        ))?;
+
         Ok(response)
     }
 
     /// Check if an order is valid
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `data` - Order data to check
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// An order check response
     #[cfg(not(tarpaulin_include))]
     async fn check(&self, data: &OrderData) -> Result<OrderCheckResponse> {
         let url = get_order_check_url(&self.config)?;
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("Content-Type", "application/json")
             .body(serde_json::to_string(data)?)
@@ -142,28 +157,34 @@ impl BoursoWebClient {
         let response = response.text().await?;
 
         if status_code != 200 {
-            return Err(anyhow::anyhow!("Failed to get order check response: {}", response));
+            return Err(anyhow::anyhow!(
+                "Failed to get order check response: {}",
+                response
+            ));
         }
 
-        let response: OrderCheckResponse = serde_json::from_str(&response)
-            .context(format!("Failed to parse order check response. Response: {}", response))?;
-        
+        let response: OrderCheckResponse = serde_json::from_str(&response).context(format!(
+            "Failed to parse order check response. Response: {}",
+            response
+        ))?;
+
         Ok(response)
     }
 
     /// Confirm an order
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `resource_id` - Resource ID of the order to confirm
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// An order confirm response
     #[cfg(not(tarpaulin_include))]
     async fn confirm(&self, resource_id: &str) -> Result<OrderConfirmResponse> {
         let url = get_order_confirm_url(&self.config)?;
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("Content-Type", "application/json")
             .body(serde_json::to_string(&serde_json::json!({
@@ -177,25 +198,31 @@ impl BoursoWebClient {
         let response = response.text().await?;
 
         if status_code != 201 {
-            return Err(anyhow::anyhow!("Failed to get order confirm response: {}", response));
+            return Err(anyhow::anyhow!(
+                "Failed to get order confirm response: {}",
+                response
+            ));
         }
 
-        let response: OrderConfirmResponse = serde_json::from_str(&response)
-            .context(format!("Failed to parse order confirm response. Response: {}", response))?;
+        let response: OrderConfirmResponse = serde_json::from_str(&response).context(format!(
+            "Failed to parse order confirm response. Response: {}",
+            response
+        ))?;
 
         Ok(response)
     }
 
     /// Cancel an order that has not been executed yet
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `account` - Account to use. Must be a trading account
     /// * `order_id` - ID of the order to cancel
     #[cfg(not(tarpaulin_include))]
     pub async fn cancel_order(&self, account: &Account, order_id: &str) -> Result<()> {
         let url = get_cancel_order_url(&self.config)?;
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("Content-Type", "application/json")
             .body(serde_json::to_string(&serde_json::json!({
@@ -210,7 +237,10 @@ impl BoursoWebClient {
         let response = response.text().await?;
 
         if status_code != 200 {
-            return Err(anyhow::anyhow!("Failed to get order prepare response: {}", response));
+            return Err(anyhow::anyhow!(
+                "Failed to get order prepare response: {}",
+                response
+            ));
         }
 
         info!("Order {} successfully cancelled", order_id);
@@ -222,12 +252,7 @@ impl BoursoWebClient {
 fn get_order_url(config: &Config) -> Result<String> {
     let trading_url = get_trading_base_url(config)?;
 
-    Ok(
-        format!(
-            "{}/order",
-            trading_url
-        )
-    )
+    Ok(format!("{}/order", trading_url))
 }
 
 fn get_order_prepare_url(config: &Config, account: &Account, symbol: &str) -> Result<String> {
@@ -242,30 +267,24 @@ fn get_order_prepare_url(config: &Config, account: &Account, symbol: &str) -> Re
 }
 
 fn get_order_check_url(config: &Config) -> Result<String> {
-    Ok(
-        format!(
-            "{}/ordersimple/check",
-            get_trading_base_url(config)?
-        )
-    )
+    Ok(format!(
+        "{}/ordersimple/check",
+        get_trading_base_url(config)?
+    ))
 }
 
 fn get_order_confirm_url(config: &Config) -> Result<String> {
-    Ok(
-        format!(
-            "{}/ordersimple/confirm",
-            get_trading_base_url(config)?
-        )
-    )
+    Ok(format!(
+        "{}/ordersimple/confirm",
+        get_trading_base_url(config)?
+    ))
 }
 
 fn get_cancel_order_url(config: &Config) -> Result<String> {
-    Ok(
-        format!(
-            "{}/orderdetail/cancel",
-            get_trading_base_url(config)?
-        )
-    )
+    Ok(format!(
+        "{}/orderdetail/cancel",
+        get_trading_base_url(config)?
+    ))
 }
 
 /// Data fetched from the `/order/prepare` endpoint
@@ -526,7 +545,7 @@ pub struct OrderData {
     /// To use at the `/ordersimple/check` endpoint
     #[serde(rename = "orderPriceLimit")]
     order_price_limit: Option<f64>,
-    /// Received at the `/order/prepare` endpoint 
+    /// Received at the `/order/prepare` endpoint
     #[serde(rename = "orderAmount")]
     order_amount: Option<f64>,
     #[serde(rename = "resourceId")]
@@ -535,7 +554,7 @@ pub struct OrderData {
     /// Validity date in format "2022-11-01"
     #[serde(rename = "orderValidity")]
     order_validity: Option<String>,
-    
+
     /// Received at the `/ordersimple/check` endpoint
     #[serde(rename = "buyingPower")]
     pub buying_power: Option<f64>,
