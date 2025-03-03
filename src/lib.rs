@@ -108,7 +108,43 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
     let mut web_client: BoursoWebClient = get_client();
     web_client.init_session().await?;
-    web_client.login(&customer_id, &password).await?;
+    match web_client.login(&customer_id, &password).await {
+        Ok(_) => {
+            info!("Login successful ✅");
+        }
+        Err(e) => match e.downcast_ref() {
+            Some(bourso_api::client::error::ClientError::MfaRequired) => {
+                let mut mfa_required = true;
+                while mfa_required {
+                    let (otp_id, token, mfa_type) = web_client.request_mfa().await?;
+                    let code = rpassword::prompt_password("Enter your MFA code: ")
+                        .context("Failed to read MFA code")?
+                        .trim()
+                        .to_string();
+                    match web_client.submit_mfa(mfa_type, otp_id, code, token).await {
+                        Ok(_) => {
+                            mfa_required = false;
+                        }
+                        Err(e) => match e.downcast_ref() {
+                            Some(bourso_api::client::error::ClientError::MfaRequired) => {
+                                warn!("Another MFA is required. Please try again.");
+                            }
+                            _ => {
+                                debug!("{:#?}", e);
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+
+                info!("MFA successful ✅");
+            }
+            _ => {
+                debug!("{:#?}", e);
+                return Err(e);
+            }
+        }
+    }
 
     let accounts: Vec<Account>;
 
