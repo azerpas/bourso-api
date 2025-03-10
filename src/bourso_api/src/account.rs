@@ -1,16 +1,17 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of account
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Default)]
 pub enum AccountKind {
     Banking,
     Savings,
+    #[default]
     Trading,
     Loans,
 }
 
 /// A bank account
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Account {
     /// Account id as an hexadecimal string (32 characters)
     pub id: String,
