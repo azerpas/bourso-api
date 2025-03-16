@@ -1,8 +1,25 @@
 use crate::client::{config::Config, BoursoWebClient};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 impl BoursoWebClient {
+    pub async fn is_market_open(&self, symbol: &str) -> Result<bool> {
+        let quote = self
+            .instrument_quote(symbol)
+            .await
+            .context("Failed to get instrument quote response.")?;
+
+        let opening_time = quote.opening_time;
+        let closing_time = quote.closing_time;
+
+        let current_time = chrono::Local::now().time();
+
+        let opening_time = chrono::NaiveTime::parse_from_str(&opening_time, "%H:%M:%S")?;
+        let closing_time = chrono::NaiveTime::parse_from_str(&closing_time, "%H:%M:%S")?;
+
+        Ok(current_time >= opening_time && current_time < closing_time)
+    }
+
     #[cfg(not(tarpaulin_include))]
     pub async fn instrument_quote(&self, symbol: &str) -> Result<InstrumentQuoteResponse> {
         use anyhow::Context;
