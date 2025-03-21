@@ -287,6 +287,34 @@ impl BoursoWebClient {
     /// * `token_form` - The token form to use to submit the MFA code.
     /// * `mfa_type` - The type of MFA requested.
     pub async fn request_mfa(&mut self) -> Result<(String, String, MfaType)> {
+        let _ = self
+            .client
+            .get(format!("{BASE_URL}/securisation"))
+            .headers(self.get_headers())
+            .send()
+            .await?;
+
+        let _ = self
+            .client
+            .get(format!("{BASE_URL}/x-domain-authentification/set-cookie"))
+            .headers(self.get_headers())
+            .send()
+            .await?;
+
+        let _ = self
+            .client
+            .get(format!("{BASE_URL}/"))
+            .headers(self.get_headers())
+            .send()
+            .await?;
+
+        let _ = self
+            .client
+            .get(format!("{BASE_URL}/securisation/authentification/"))
+            .headers(self.get_headers())
+            .send()
+            .await?;
+
         let res = self
             .client
             .get(format!(
@@ -294,9 +322,9 @@ impl BoursoWebClient {
             ))
             .headers(self.get_headers())
             .send()
-            .await?
-            .text()
             .await?;
+
+        let res = res.text().await?;
 
         let mfa_type = if res.contains("brs-otp-email") {
             MfaType::Email
@@ -420,14 +448,22 @@ impl BoursoWebClient {
                     "{BASE_URL}/securisation/authentification/validation"
                 ))
                 .form(&params)
-                .headers(self.get_headers())
                 .header("Host", "clients.boursobank.com")
+                .header(
+                    "accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                )
                 .header("origin", "https://clients.boursobank.com")
+                .header("sec-fetch-site", "same-origin")
+                .header("sec-fetch-mode", "navigate")
+                .headers(self.get_headers())
                 .header(
                     "referer",
                     "https://clients.boursobank.com/securisation/authentification/validation",
                 )
+                .header("sec-fetch-dest", "document")
                 .header("accept-language", "fr-FR,fr;q=0.9")
+                .header("priority", "u=0, i")
                 .send()
                 .await?;
 
