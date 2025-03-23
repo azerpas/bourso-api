@@ -42,7 +42,7 @@ pub struct BoursoWebClient {
     pub config: Config,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MfaType {
     Email,
     Sms,
