@@ -13,6 +13,7 @@ use error::ClientError;
 use log::{debug, error, info};
 use regex::Regex;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+use serde::{Deserialize, Serialize};
 
 use self::config::{extract_brs_config, Config};
 
@@ -41,7 +42,7 @@ pub struct BoursoWebClient {
     pub config: Config,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MfaType {
     Email,
     Sms,
