@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 impl BoursoWebClient {
+    #[cfg(not(tarpaulin_include))]
     pub async fn is_market_open(&self, symbol: &str) -> Result<bool> {
         let quote = self
             .instrument_quote(symbol)
