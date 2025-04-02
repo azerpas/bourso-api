@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 impl BoursoWebClient {
     #[cfg(not(tarpaulin_include))]
     pub async fn is_market_open(&self, symbol: &str) -> Result<bool> {
-        let quote = self
-            .instrument_quote(symbol)
-            .await
-            .context("Failed to get instrument quote response.")?;
+        let quote = match self.instrument_quote(symbol).await {
+            Ok(quote) => quote,
+            Err(e) => {
+                return Err(anyhow::anyhow!("Failed to check if market is open: {}", e));
+            }
+        };
 
         let opening_time = quote.opening_time;
         let closing_time = quote.closing_time;
