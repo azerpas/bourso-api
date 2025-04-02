@@ -52,12 +52,12 @@ impl BoursoWebClient {
 }
 
 fn get_feed_base_url(config: &Config) -> Result<String> {
-    Ok(format!("{}/_public_/feed", config.api_url,))
+    Ok(format!("{}/_public_/feed", config.api_url))
 }
 
 fn get_instrument_quote_url(config: &Config, symbol: &str) -> Result<String> {
     Ok(format!(
-        "{}instrument/quote/{}?_host=tradingboard.boursobank.com",
+        "{}/instrument/quote/{}?_host=tradingboard.boursobank.com",
         get_feed_base_url(config)?,
         symbol
     ))
