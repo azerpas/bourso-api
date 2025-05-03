@@ -576,7 +576,7 @@ mod tests {
     fn test_get_headers() {
         let client = BoursoWebClient::new();
         let headers = client.get_headers();
-        assert_eq!(headers.get("user-agent").unwrap().to_str().unwrap(), "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36");
+        assert_eq!(headers.get("user-agent").unwrap().to_str().unwrap(), "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36");
     }
 
     #[test]
