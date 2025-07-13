@@ -117,6 +117,16 @@ async fn main() -> Result<()> {
                     // )
                     .subcommand_required(true)
                 )
+                .subcommand(
+                    Command::new("position")
+                        .about("Manage your positions in your trading account")
+                        .subcommand(
+                            Command::new("list")
+                                .about("List all your positions in your trading account")
+                                .arg(account_arg.clone())
+                        )
+                        .subcommand_required(true)
+                )
                 .subcommand_required(true)
         )
         .subcommand(
