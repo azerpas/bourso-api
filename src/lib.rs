@@ -116,7 +116,8 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         Some(("accounts", _))
         | Some(("transactions", _))
         | Some(("balance", _))
-        | Some(("trade", _)) => (),
+        | Some(("trade", _))
+        | Some(("transfer", _)) => (),
         _ => unreachable!(),
     }
 
@@ -259,6 +260,48 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 _ => unreachable!(),
             }
         }
+
+        Some(("transfer", transfer_matches)) => {
+            accounts = web_client.get_accounts(None).await?;
+
+            let from_account_id = transfer_matches
+                .get_one::<String>("account")
+                .map(|s| s.as_str())
+                .unwrap();
+            let to_account_id = transfer_matches
+                .get_one::<String>("to_account")
+                .map(|s| s.as_str())
+                .unwrap();
+            let amount = transfer_matches
+                .get_one::<String>("amount")
+                .map(|s| s.parse::<f64>().unwrap())
+                .unwrap();
+            let reason = transfer_matches
+                .get_one::<String>("reason")
+                .map(|s| s.as_str());
+
+            // Get from_account from previously fetched accounts
+            let from_account = accounts
+                .iter()
+                .find(|a| a.id == from_account_id)
+                .context("From account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+
+            // Get to_account from previously fetched accounts
+            let to_account = accounts
+                .iter()
+                .find(|a| a.id == to_account_id)
+                .context("To account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+
+            let _ = web_client
+                .transfer_funds(amount, &from_account.id, &to_account.id, reason)
+                .await?;
+
+            info!(
+                "Transfer of {} from account {} to account {} successful ✅",
+                amount, from_account.id, to_account.id
+            );
+        }
+
         _ => unreachable!(),
     }
 
