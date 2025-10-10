@@ -1,6 +1,9 @@
 use anyhow::Result;
 use bourso_api::client::trade::order::OrderSide;
-use clap::{builder::{PossibleValue, ValueParser}, Arg, Command};
+use clap::{
+    builder::{PossibleValue, ValueParser},
+    Arg, Command,
+};
 
 use log::debug;
 use validate::validate_account_id;
@@ -22,9 +25,8 @@ async fn main() -> Result<()> {
         .long("account")
         .help(
             r#"The account to use by its 'id' (e.g: 'e51f635524a7d506e4d4a7a8088b6278').
-    You can get this info with the command `bourso accounts`"#
+    You can get this info with the command `bourso accounts`"#,
         )
-        .default_value("PEA")
         .value_parser(clap::value_parser!(String)) // Enforce input as String
         .value_parser(ValueParser::new(validate_account_id))
         .required(true);
@@ -176,6 +178,32 @@ async fn main() -> Result<()> {
                         .about("Get the last value of the stock. Sets the `length` to 1 day and `interval` to 0")
                 )
         )
+        .subcommand(
+            Command::new("transfer")
+                .about("Make a transfer between your accounts")
+                .arg(account_arg.clone())
+                .arg(
+                    Arg::new("to_account")
+                        .long("to")
+                        .help(
+                            r#"The destination account id as an hexadecimal string (32 characters).
+    You can get this info with the command `bourso accounts`"#
+                        )
+                        .required(true)
+                )
+                .arg(
+                    Arg::new("amount")
+                        .long("amount")
+                        .help("The amount to transfer")
+                        .required(true)
+                )
+                .arg(
+                    Arg::new("reason")
+                        .long("reason")
+                        .help("The reason for the transfer (max 50 characters)")
+                        .required(false)
+                )
+        )
         .arg(
             Arg::new("credentials")
                 .long("credentials")
@@ -189,5 +217,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-

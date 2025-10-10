@@ -1,6 +1,8 @@
 use crate::{
-    account::{AccountKind, Account},
-    constants::{BASE_URL, SAVINGS_PATTERN, BANKING_PATTERN, TRADING_PATTERN, LOANS_PATTERN, ACCOUNT_PATTERN}
+    account::{Account, AccountKind},
+    constants::{
+        ACCOUNT_PATTERN, BANKING_PATTERN, BASE_URL, LOANS_PATTERN, SAVINGS_PATTERN, TRADING_PATTERN,
+    },
 };
 
 use super::BoursoWebClient;
@@ -11,17 +13,20 @@ use regex::Regex;
 
 impl BoursoWebClient {
     /// Get the accounts list.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `kind` - The type of accounts to retrieve. If `None`, all accounts are retrieved.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The accounts list as a vector of `Account`.
     pub async fn get_accounts(&self, kind: Option<AccountKind>) -> Result<Vec<Account>> {
-        let res = self.client
-            .get(format!("{BASE_URL}/dashboard/liste-comptes?rumroute=dashboard.new_accounts&_hinclude=1"))
+        let res = self
+            .client
+            .get(format!(
+                "{BASE_URL}/dashboard/liste-comptes?rumroute=dashboard.new_accounts&_hinclude=1"
+            ))
             .headers(self.get_headers())
             .send()
             .await?
@@ -34,14 +39,13 @@ impl BoursoWebClient {
             Some(AccountKind::Trading) => extract_accounts(&res, AccountKind::Trading)?,
             Some(AccountKind::Loans) => extract_accounts(&res, AccountKind::Loans)?,
             // all accounts
-            _ => {
-                [
-                    extract_accounts(&res, AccountKind::Savings).unwrap_or(Vec::new()),
-                    extract_accounts(&res, AccountKind::Banking).unwrap_or(Vec::new()),
-                    extract_accounts(&res, AccountKind::Trading).unwrap_or(Vec::new()),
-                    extract_accounts(&res, AccountKind::Loans).unwrap_or(Vec::new()),
-                ].concat()
-            },
+            _ => [
+                extract_accounts(&res, AccountKind::Savings).unwrap_or(Vec::new()),
+                extract_accounts(&res, AccountKind::Banking).unwrap_or(Vec::new()),
+                extract_accounts(&res, AccountKind::Trading).unwrap_or(Vec::new()),
+                extract_accounts(&res, AccountKind::Loans).unwrap_or(Vec::new()),
+            ]
+            .concat(),
         };
 
         Ok(accounts)
@@ -49,18 +53,19 @@ impl BoursoWebClient {
 }
 
 fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
-    let regex = Regex::new(
-        match kind {
-            AccountKind::Savings => SAVINGS_PATTERN,
-            AccountKind::Banking => BANKING_PATTERN,
-            AccountKind::Trading => TRADING_PATTERN,
-            AccountKind::Loans => LOANS_PATTERN,
-        }
-    )?;
+    let regex = Regex::new(match kind {
+        AccountKind::Savings => SAVINGS_PATTERN,
+        AccountKind::Banking => BANKING_PATTERN,
+        AccountKind::Trading => TRADING_PATTERN,
+        AccountKind::Loans => LOANS_PATTERN,
+    })?;
     let accounts_ul = regex
         .captures(&res)
         .with_context(|| {
-            debug!("Response: {}", res);
+            debug!(
+                "Failed to extract accounts with kind {:?} from response: {}",
+                kind, res
+            );
             format!("Failed to extract {:?} accounts from the response", kind)
         })?
         .get(1)
@@ -71,35 +76,22 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
 
     let accounts = account_regex
         .captures_iter(&accounts_ul)
-        .map(|m| {
-            Account {
-                id: m.name("id")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .to_string(),
-                name: m.name("name")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .to_string(),
-                balance: m.name("balance")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .replace(" ", "")
-                    .replace(",", "")
-                    .replace("\u{a0}", "")
-                    .replace("−", "-")
-                    .parse::<isize>()
-                    .unwrap(),
-                bank_name: m.name("bank_name")
-                    .unwrap()
-                    .as_str()
-                    .trim()
-                    .to_string(),
-                kind: kind,
-            }
+        .map(|m| Account {
+            id: m.name("id").unwrap().as_str().trim().to_string(),
+            name: m.name("name").unwrap().as_str().trim().to_string(),
+            balance: m
+                .name("balance")
+                .unwrap()
+                .as_str()
+                .trim()
+                .replace(" ", "")
+                .replace(",", "")
+                .replace("\u{a0}", "")
+                .replace("−", "-")
+                .parse::<isize>()
+                .unwrap(),
+            bank_name: m.name("bank_name").unwrap().as_str().trim().to_string(),
+            kind: kind,
         })
         .collect::<Vec<Account>>();
 
@@ -108,7 +100,7 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{client::account::extract_accounts, account::AccountKind};
+    use crate::{account::AccountKind, client::account::extract_accounts};
 
     #[test]
     fn test_extract_accounts() {
@@ -139,8 +131,6 @@ mod tests {
         assert_eq!(accounts[0].balance, -9495982);
         assert_eq!(accounts[0].bank_name, "Crédit Agricole");
     }
-
-
 
     pub const ACCOUNTS_RES: &str = r#"<hx:include id="hinclude__XXXXXXXX" src="/dashboard/offres?rumroute=dashboard.offers"
     data-cs-override-id="dashboard.offers">

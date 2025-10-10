@@ -17,3 +17,6 @@ reqwest_cookie_store = "0.8.0"
 cookie_store = "0.21.1"
 chrono = { version = "0.4.39" }
 log = { version = "0.4.20" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
