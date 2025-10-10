@@ -1,5 +1,5 @@
 use crate::client::{config::Config, BoursoWebClient};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 impl BoursoWebClient {
