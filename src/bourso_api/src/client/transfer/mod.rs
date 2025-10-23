@@ -1,3 +1,5 @@
+#[cfg(not(tarpaulin_include))]
+use crate::account::{Account, AccountKind};
 use crate::{client::transfer::error::TransferError, client::BoursoWebClient, constants::BASE_URL};
 use anyhow::{bail, Context, Result};
 
@@ -8,14 +10,19 @@ impl BoursoWebClient {
     pub async fn transfer_funds(
         &self,
         amount: f64,
-        from_account: &str,
-        to_account: &str,
+        from_account: Account,
+        to_account: Account,
         reason: Option<&str>,
     ) -> Result<()> {
         // Minimum amount is 10 EUR
         if amount < 10.0 {
             bail!(TransferError::AmountTooLow);
         }
+
+        let transfer_from_banking = from_account.kind == AccountKind::Banking;
+
+        let from_account = &from_account.id;
+        let to_account = &to_account.id;
 
         // Default reason if none provided, else use provided reason and
         // warn if the reason is too long (> 50 characters)
@@ -90,8 +97,13 @@ impl BoursoWebClient {
             bail!(TransferError::SetDebitAccountFailed);
         }
 
-        let data = reqwest::multipart::Form::new()
-            .text("CreditAccount[newBeneficiary]", "0".to_string())
+        let form = if transfer_from_banking {
+            reqwest::multipart::Form::new().text("CreditAccount[newBeneficiary]", "0".to_string())
+        } else {
+            reqwest::multipart::Form::new()
+        };
+
+        let data = form
             .text(
                 "flow_ImmediateCashTransfer_instance",
                 flow_instance.to_string(),
