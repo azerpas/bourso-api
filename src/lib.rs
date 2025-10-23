@@ -293,7 +293,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 .context("To account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
 
             let _ = web_client
-                .transfer_funds(amount, &from_account.id, &to_account.id, reason)
+                .transfer_funds(amount, from_account.clone(), to_account.clone(), reason)
                 .await?;
 
             info!(
