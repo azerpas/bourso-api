@@ -15,9 +15,17 @@ impl BoursoWebClient {
         reason: Option<&str>,
     ) -> Result<()> {
         // Minimum amount is 10 EUR
+
         if amount < 10.0 {
             bail!(TransferError::AmountTooLow);
         }
+
+        log::debug!(
+            "Initiating transfer of {:.2} EUR from account {} to account {}",
+            amount,
+            from_account.id,
+            to_account.id
+        );
 
         let transfer_from_banking = from_account.kind == AccountKind::Banking;
 
