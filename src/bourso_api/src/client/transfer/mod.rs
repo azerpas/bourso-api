@@ -43,7 +43,10 @@ impl BoursoWebClient {
             "Virement depuis BoursoBank".to_string()
         };
 
-        let init_transfer_url = get_init_transfer_url(from_account);
+        let init_transfer_url = format!(
+            "{}/compte/cav/{}/virements/immediat/nouveau",
+            BASE_URL, from_account
+        );
 
         let res = self.client.get(&init_transfer_url).send().await?;
 
@@ -93,12 +96,12 @@ impl BoursoWebClient {
             .text("flow_ImmediateCashTransfer_step", "1".to_string())
             .text("DebitAccount[debit]", from_account.to_string());
 
-        let second_res = self
-            .client
-            .post(&get_set_debit_account_url(from_account, transfer_id))
-            .multipart(data)
-            .send()
-            .await?;
+        let url = format!(
+            "{}/compte/cav/{}/virements/immediat/nouveau/{}/2",
+            BASE_URL, from_account, transfer_id
+        );
+
+        let second_res = self.client.post(&url).multipart(data).send().await?;
 
         if second_res.status() != 200 {
             log::debug!("Set debit account response: {:?}", second_res);
@@ -119,12 +122,12 @@ impl BoursoWebClient {
             .text("flow_ImmediateCashTransfer_step", "2".to_string())
             .text("CreditAccount[credit]", to_account.to_string());
 
-        let third_res = self
-            .client
-            .post(&get_set_credit_account_url(from_account, transfer_id))
-            .multipart(data)
-            .send()
-            .await?;
+        let url = format!(
+            "{}/compte/cav/{}/virements/immediat/nouveau/{}/3",
+            BASE_URL, from_account, transfer_id
+        );
+
+        let third_res = self.client.post(&url).multipart(data).send().await?;
 
         if third_res.status() != 200 {
             log::debug!("Set credit account response: {:?}", third_res);
@@ -141,12 +144,12 @@ impl BoursoWebClient {
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("submit", "".to_string());
 
-        let set_amount_res = self
-            .client
-            .post(&get_set_amount_url(from_account, transfer_id))
-            .multipart(data)
-            .send()
-            .await?;
+        let url = format!(
+            "{}/compte/cav/{}/virements/immediat/nouveau/{}/6",
+            BASE_URL, from_account, transfer_id
+        );
+
+        let set_amount_res = self.client.post(&url).multipart(data).send().await?;
 
         if set_amount_res.status() != 200 {
             log::debug!("Set amount response: {:?}", set_amount_res);
@@ -189,12 +192,12 @@ impl BoursoWebClient {
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("submit", "".to_string());
 
-        let set_reason_res = self
-            .client
-            .post(&get_set_reason_url(from_account, transfer_id))
-            .multipart(data)
-            .send()
-            .await?;
+        let url = format!(
+            "{}/compte/cav/{}/virements/immediat/nouveau/{}/10",
+            BASE_URL, from_account, transfer_id
+        );
+
+        let set_reason_res = self.client.post(&url).multipart(data).send().await?;
 
         if set_reason_res.status() != 200 {
             log::debug!("Set reason response: {:?}", set_reason_res);
@@ -235,39 +238,4 @@ impl BoursoWebClient {
             bail!(TransferError::InvalidTransfer);
         }
     }
-}
-
-fn get_init_transfer_url(from_account: &str) -> String {
-    format!(
-        "{}/compte/cav/{}/virements/immediat/nouveau",
-        BASE_URL, from_account
-    )
-}
-
-fn get_set_debit_account_url(from_account: &str, transfer_id: &str) -> String {
-    format!(
-        "{}/compte/cav/{}/virements/immediat/nouveau/{}/2",
-        BASE_URL, from_account, transfer_id
-    )
-}
-
-fn get_set_credit_account_url(from_account: &str, transfer_id: &str) -> String {
-    format!(
-        "{}/compte/cav/{}/virements/immediat/nouveau/{}/3",
-        BASE_URL, from_account, transfer_id
-    )
-}
-
-fn get_set_amount_url(from_account: &str, transfer_id: &str) -> String {
-    format!(
-        "{}/compte/cav/{}/virements/immediat/nouveau/{}/6",
-        BASE_URL, from_account, transfer_id
-    )
-}
-
-fn get_set_reason_url(from_account: &str, transfer_id: &str) -> String {
-    format!(
-        "{}/compte/cav/{}/virements/immediat/nouveau/{}/10",
-        BASE_URL, from_account, transfer_id
-    )
 }
