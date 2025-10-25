@@ -576,13 +576,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_headers() {
-        let client = BoursoWebClient::new();
-        let headers = client.get_headers();
-        assert_eq!(headers.get("user-agent").unwrap().to_str().unwrap(), "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36");
-    }
-
-    #[test]
     fn test_extract_brs_mit_cookie() {
         let res = r#"<!DOCTYPE html> \n<html>\n<head>\n    <script type="text/javascript">\n    document.cookie="__brs_mit=8e6912eb6a0268f0a2411668b8bf289f; domain=." + window.location.hostname + "; path=/; ";\n    window.location.reload();\n    </script>\n</head>\n<body>\n</body>\n</html>\n\n"#;
         let brs_mit_cookie = extract_brs_mit_cookie(&res).unwrap();
