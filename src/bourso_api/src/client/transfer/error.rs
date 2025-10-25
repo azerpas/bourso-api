@@ -15,6 +15,7 @@ pub enum TransferError {
 }
 
 impl fmt::Display for TransferError {
+    #[cfg(not(tarpaulin_include))]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TransferError::AmountTooLow => {
