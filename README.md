@@ -21,6 +21,7 @@ The first goal of this project was creating an automated [DCA (Dollar Cost Avera
   - [Get your accounts](#get-your-accounts) 
   - [Place an order](#place-an-order)
   - [Quote 🥷](#quote)
+  - [Transfer funds](#transfer-funds)
   - [DCA](#dca-dollar-cost-averaging-investing)
 - [Security](#security)
 - [Disclaimer](#disclaimer)
@@ -126,6 +127,15 @@ INFO  bourso_cli > Fetching quotes...
 INFO  bourso_cli > Average quote: 494.5348136363637
 ```
 Subcommands available: `highest`, `lowest`, `average`, `volume`, `last`
+
+### Transfer funds
+Transfer 10€ between your accounts:
+```
+./bourso-cli transfer --account a583f3c5842c34fb00b408486ef493e0 --to b419f2d28010bafb331badef11bba51e --amount 10
+```
+*Tip: You can get the accounts ids from the [`accounts` command](#get-your-accounts)*
+
+Amount can be a decimal with minimum being 10,0€.
 
 ### DCA (Dollar Cost Averaging) investing
 
