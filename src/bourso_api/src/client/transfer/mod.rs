@@ -2,8 +2,59 @@
 use crate::account::{Account, AccountKind};
 use crate::{client::transfer::error::TransferError, client::BoursoWebClient, constants::BASE_URL};
 use anyhow::{bail, Context, Result};
+use futures_util::stream::Stream;
 
 mod error;
+
+#[derive(Debug, Clone)]
+pub enum TransferProgress {
+    Validating,
+    InitializingTransfer,
+    ExtractingFlowInstance,
+    SettingDebitAccount,
+    SettingCreditAccount,
+    SettingAmount,
+    SubmittingStep7,
+    SettingReason,
+    ConfirmingTransfer,
+    Completed,
+}
+
+impl TransferProgress {
+    pub fn step_number(&self) -> u8 {
+        match self {
+            TransferProgress::Validating => 1,
+            TransferProgress::InitializingTransfer => 2,
+            TransferProgress::ExtractingFlowInstance => 3,
+            TransferProgress::SettingDebitAccount => 4,
+            TransferProgress::SettingCreditAccount => 5,
+            TransferProgress::SettingAmount => 6,
+            TransferProgress::SubmittingStep7 => 7,
+            TransferProgress::SettingReason => 8,
+            TransferProgress::ConfirmingTransfer => 9,
+            TransferProgress::Completed => 10,
+        }
+    }
+
+    pub fn total_steps() -> u8 {
+        10
+    }
+
+    pub fn description(&self) -> &str {
+        match self {
+            TransferProgress::Validating => "Validating transfer parameters",
+            TransferProgress::InitializingTransfer => "Initializing transfer",
+            TransferProgress::ExtractingFlowInstance => "Extracting flow instance",
+            TransferProgress::SettingDebitAccount => "Setting debit account",
+            TransferProgress::SettingCreditAccount => "Setting credit account",
+            TransferProgress::SettingAmount => "Setting transfer amount",
+            TransferProgress::SubmittingStep7 => "Submitting intermediate step",
+            TransferProgress::SettingReason => "Setting transfer reason",
+            TransferProgress::ConfirmingTransfer => "Confirming transfer",
+            TransferProgress::Completed => "Transfer completed",
+        }
+    }
+}
 
 impl BoursoWebClient {
     /// Initialize the transfer and extract the transfer ID
@@ -272,86 +323,130 @@ impl BoursoWebClient {
     }
 
     #[cfg(not(tarpaulin_include))]
-    pub async fn transfer_funds(
+    pub fn transfer_funds_with_progress(
         &self,
         amount: f64,
         from_account: Account,
         to_account: Account,
-        reason: Option<&str>,
-    ) -> Result<()> {
-        // Minimum amount is 10 EUR
-        if amount < 10.0 {
-            bail!(TransferError::AmountTooLow);
-        }
+        reason: Option<String>,
+    ) -> impl Stream<Item = Result<TransferProgress>> + '_ {
+        async_stream::stream! {
+            // Validation
+            yield Ok(TransferProgress::Validating);
 
-        log::debug!(
-            "Initiating transfer of {:.2} EUR from account {} to account {}",
-            amount,
-            from_account.id,
-            to_account.id
-        );
-
-        let transfer_from_banking = from_account.kind == AccountKind::Banking;
-        let from_account_id = &from_account.id;
-        let to_account_id = &to_account.id;
-
-        // Default reason if none provided, else use provided reason and
-        // warn if the reason is too long (> 50 characters)
-        let transfer_reason = if let Some(r) = reason {
-            if r.len() > 50 {
-                bail!(TransferError::ReasonIsTooLong);
+            if amount < 10.0 {
+                yield Err(TransferError::AmountTooLow.into());
+                return;
             }
-            r.to_string()
-        } else {
-            "Virement depuis BoursoBank".to_string()
-        };
 
-        // Step 1: Initialize transfer and get transfer ID
-        let transfer_id = self.init_transfer(from_account_id).await?;
+            log::debug!(
+                "Initiating transfer of {:.2} EUR from account {} to account {}",
+                amount,
+                from_account.id,
+                to_account.id
+            );
 
-        // Extract flow instance
-        let flow_instance = self
-            .extract_flow_instance(&format!(
-                "{}/compte/cav/{}/virements/immediat/nouveau/{}/1",
-                BASE_URL, from_account_id, transfer_id
-            ))
-            .await?;
+            let transfer_from_banking = from_account.kind == AccountKind::Banking;
+            let from_account_id = from_account.id.clone();
+            let to_account_id = to_account.id.clone();
 
-        // Step 2: Set debit account
-        self.set_debit_account(from_account_id, &transfer_id, &flow_instance)
-            .await?;
+            // Default reason if none provided, else use provided reason and
+            // warn if the reason is too long (> 50 characters)
+            let transfer_reason = if let Some(r) = reason {
+                if r.len() > 50 {
+                    yield Err(TransferError::ReasonIsTooLong.into());
+                    return;
+                }
+                r
+            } else {
+                "Virement depuis BoursoBank".to_string()
+            };
 
-        // Step 3: Set credit account
-        self.set_credit_account(
-            from_account_id,
-            to_account_id,
-            &transfer_id,
-            &flow_instance,
-            transfer_from_banking,
-        )
-        .await?;
+            // Step 1: Initialize transfer and get transfer ID
+            yield Ok(TransferProgress::InitializingTransfer);
+            let transfer_id = match self.init_transfer(&from_account_id).await {
+                Ok(id) => id,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
 
-        // Step 6: Set amount
-        self.set_transfer_amount(from_account_id, &transfer_id, &flow_instance, amount)
-            .await?;
+            // Extract flow instance
+            yield Ok(TransferProgress::ExtractingFlowInstance);
+            let flow_instance = match self
+                .extract_flow_instance(&format!(
+                    "{}/compte/cav/{}/virements/immediat/nouveau/{}/1",
+                    BASE_URL, &from_account_id, transfer_id
+                ))
+                .await {
+                Ok(flow) => flow,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
 
-        // Step 7: Submit
-        self.submit_step_7(from_account_id, &transfer_id, &flow_instance)
-            .await?;
+            // Step 2: Set debit account
+            yield Ok(TransferProgress::SettingDebitAccount);
+            if let Err(e) = self.set_debit_account(&from_account_id, &transfer_id, &flow_instance)
+                .await {
+                yield Err(e);
+                return;
+            }
 
-        // Step 10: Set reason
-        self.set_transfer_reason(
-            from_account_id,
-            &transfer_id,
-            &flow_instance,
-            &transfer_reason,
-        )
-        .await?;
+            // Step 3: Set credit account
+            yield Ok(TransferProgress::SettingCreditAccount);
+            if let Err(e) = self.set_credit_account(
+                &from_account_id,
+                &to_account_id,
+                &transfer_id,
+                &flow_instance,
+                transfer_from_banking,
+            )
+            .await {
+                yield Err(e);
+                return;
+            }
 
-        // Step 12: Confirm transfer
-        self.confirm_transfer(from_account_id, &transfer_id, &flow_instance)
-            .await?;
+            // Step 6: Set amount
+            yield Ok(TransferProgress::SettingAmount);
+            if let Err(e) = self.set_transfer_amount(&from_account_id, &transfer_id, &flow_instance, amount)
+                .await {
+                yield Err(e);
+                return;
+            }
 
-        Ok(())
+            // Step 7: Submit
+            yield Ok(TransferProgress::SubmittingStep7);
+            if let Err(e) = self.submit_step_7(&from_account_id, &transfer_id, &flow_instance)
+                .await {
+                yield Err(e);
+                return;
+            }
+
+            // Step 10: Set reason
+            yield Ok(TransferProgress::SettingReason);
+            if let Err(e) = self.set_transfer_reason(
+                &from_account_id,
+                &transfer_id,
+                &flow_instance,
+                &transfer_reason,
+            )
+            .await {
+                yield Err(e);
+                return;
+            }
+
+            // Step 12: Confirm transfer
+            yield Ok(TransferProgress::ConfirmingTransfer);
+            if let Err(e) = self.confirm_transfer(&from_account_id, &transfer_id, &flow_instance)
+                .await {
+                yield Err(e);
+                return;
+            }
+
+            yield Ok(TransferProgress::Completed);
+        }
     }
 }

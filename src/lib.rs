@@ -3,11 +3,13 @@ use bourso_api::{
     account::{Account, AccountKind},
     client::{
         trade::{order::OrderSide, tick::QuoteTab},
+        transfer::TransferProgress,
         BoursoWebClient,
     },
     get_client,
 };
 use clap::ArgMatches;
+use futures_util::StreamExt;
 use log::{info, warn};
 
 mod settings;
@@ -292,9 +294,40 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 .find(|a| a.id == to_account_id)
                 .context("To account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
 
-            let _ = web_client
-                .transfer_funds(amount, from_account.clone(), to_account.clone(), reason)
-                .await?;
+            let stream = web_client.transfer_funds_with_progress(
+                amount,
+                from_account.clone(),
+                to_account.clone(),
+                reason.map(|s| s.to_string()),
+            );
+
+            use futures_util::pin_mut;
+            pin_mut!(stream);
+
+            // Track progress and update display
+            while let Some(progress_result) = stream.next().await {
+                let progress = progress_result?;
+                let step = progress.step_number();
+                let total = TransferProgress::total_steps();
+                let percentage = (step as f32 / total as f32 * 100.0) as u8;
+
+                // Create a simple progress bar
+                let bar_length = 30;
+                let filled = (bar_length as f32 * step as f32 / total as f32) as usize;
+                let bar: String = "█".repeat(filled) + &"░".repeat(bar_length - filled);
+
+                print!(
+                    "\r[{}] {:3}% - {}/{} - {}",
+                    bar,
+                    percentage,
+                    step,
+                    total,
+                    progress.description()
+                );
+                use std::io::Write;
+                std::io::stdout().flush().unwrap();
+            }
+            println!(); // New line after progress is complete
 
             info!(
                 "Transfer of {} from account {} to account {} successful ✅",
