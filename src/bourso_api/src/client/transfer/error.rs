@@ -35,3 +35,5 @@ impl fmt::Display for TransferError {
         }
     }
 }
+
+impl std::error::Error for TransferError {}
