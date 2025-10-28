@@ -6,43 +6,8 @@ use anyhow::{bail, Context, Result};
 mod error;
 
 impl BoursoWebClient {
-    #[cfg(not(tarpaulin_include))]
-    pub async fn transfer_funds(
-        &self,
-        amount: f64,
-        from_account: Account,
-        to_account: Account,
-        reason: Option<&str>,
-    ) -> Result<()> {
-        // Minimum amount is 10 EUR
-
-        if amount < 10.0 {
-            bail!(TransferError::AmountTooLow);
-        }
-
-        log::debug!(
-            "Initiating transfer of {:.2} EUR from account {} to account {}",
-            amount,
-            from_account.id,
-            to_account.id
-        );
-
-        let transfer_from_banking = from_account.kind == AccountKind::Banking;
-
-        let from_account = &from_account.id;
-        let to_account = &to_account.id;
-
-        // Default reason if none provided, else use provided reason and
-        // warn if the reason is too long (> 50 characters)
-        let transfer_reason = if let Some(r) = reason {
-            if r.len() > 50 {
-                bail!(TransferError::ReasonIsTooLong);
-            }
-            r.to_string()
-        } else {
-            "Virement depuis BoursoBank".to_string()
-        };
-
+    /// Initialize the transfer and extract the transfer ID
+    async fn init_transfer(&self, from_account: &str) -> Result<String> {
         let init_transfer_url = format!(
             "{}/compte/cav/{}/virements/immediat/nouveau",
             BASE_URL, from_account
@@ -66,28 +31,41 @@ impl BoursoWebClient {
         let transfer_id = location
             .split('/')
             .nth(7)
-            .context("Failed to extract transfer id")?;
+            .context("Failed to extract transfer id")?
+            .to_string();
 
-        let first_res = self
-            .client
-            .get(format!("{}{}", BASE_URL, location))
-            .send()
-            .await?;
+        Ok(transfer_id)
+    }
 
-        if first_res.status() != 200 {
-            log::debug!("First transfer step response: {:?}", first_res);
+    /// Extract the flow instance from the HTML response
+    async fn extract_flow_instance(&self, url: &str) -> Result<String> {
+        let res = self.client.get(url).send().await?;
+
+        if res.status() != 200 {
+            log::debug!("First transfer step response: {:?}", res);
             bail!(TransferError::TransferInitiationFailed);
         }
 
-        let first_res_text = first_res.text().await?;
+        let res_text = res.text().await?;
         let re = regex::Regex::new(r#"name="flow_ImmediateCashTransfer_instance" value="([^"]+)""#)
             .unwrap();
         let flow_instance = re
-            .captures(&first_res_text)
+            .captures(&res_text)
             .and_then(|cap| cap.get(1))
             .map(|m| m.as_str())
-            .context("Failed to extract flow instance")?;
+            .context("Failed to extract flow instance")?
+            .to_string();
 
+        Ok(flow_instance)
+    }
+
+    /// Set the debit account (step 2)
+    async fn set_debit_account(
+        &self,
+        from_account: &str,
+        transfer_id: &str,
+        flow_instance: &str,
+    ) -> Result<()> {
         let data = reqwest::multipart::Form::new()
             .text(
                 "flow_ImmediateCashTransfer_instance",
@@ -101,13 +79,25 @@ impl BoursoWebClient {
             BASE_URL, from_account, transfer_id
         );
 
-        let second_res = self.client.post(&url).multipart(data).send().await?;
+        let res = self.client.post(&url).multipart(data).send().await?;
 
-        if second_res.status() != 200 {
-            log::debug!("Set debit account response: {:?}", second_res);
+        if res.status() != 200 {
+            log::debug!("Set debit account response: {:?}", res);
             bail!(TransferError::SetDebitAccountFailed);
         }
 
+        Ok(())
+    }
+
+    /// Set the credit account (step 3)
+    async fn set_credit_account(
+        &self,
+        from_account: &str,
+        to_account: &str,
+        transfer_id: &str,
+        flow_instance: &str,
+        transfer_from_banking: bool,
+    ) -> Result<()> {
         let form = if transfer_from_banking {
             reqwest::multipart::Form::new().text("CreditAccount[newBeneficiary]", "0".to_string())
         } else {
@@ -127,13 +117,24 @@ impl BoursoWebClient {
             BASE_URL, from_account, transfer_id
         );
 
-        let third_res = self.client.post(&url).multipart(data).send().await?;
+        let res = self.client.post(&url).multipart(data).send().await?;
 
-        if third_res.status() != 200 {
-            log::debug!("Set credit account response: {:?}", third_res);
+        if res.status() != 200 {
+            log::debug!("Set credit account response: {:?}", res);
             bail!(TransferError::SetCreditAccountFailed);
         }
 
+        Ok(())
+    }
+
+    /// Set the transfer amount (step 6)
+    async fn set_transfer_amount(
+        &self,
+        from_account: &str,
+        transfer_id: &str,
+        flow_instance: &str,
+        amount: f64,
+    ) -> Result<()> {
         let data = reqwest::multipart::Form::new()
             .text(
                 "flow_ImmediateCashTransfer_instance",
@@ -149,13 +150,23 @@ impl BoursoWebClient {
             BASE_URL, from_account, transfer_id
         );
 
-        let set_amount_res = self.client.post(&url).multipart(data).send().await?;
+        let res = self.client.post(&url).multipart(data).send().await?;
 
-        if set_amount_res.status() != 200 {
-            log::debug!("Set amount response: {:?}", set_amount_res);
+        if res.status() != 200 {
+            log::debug!("Set amount response: {:?}", res);
             bail!(TransferError::SetAmountFailed);
         }
 
+        Ok(())
+    }
+
+    /// Submit step 7
+    async fn submit_step_7(
+        &self,
+        from_account: &str,
+        transfer_id: &str,
+        flow_instance: &str,
+    ) -> Result<()> {
         let data = reqwest::multipart::Form::new()
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text(
@@ -165,7 +176,7 @@ impl BoursoWebClient {
             .text("flow_ImmediateCashTransfer_step", "6".to_string())
             .text("submit", "".to_string());
 
-        let submit_res = self
+        let res = self
             .client
             .post(format!(
                 "{}/compte/cav/{}/virements/immediat/nouveau/{}/7",
@@ -175,18 +186,29 @@ impl BoursoWebClient {
             .send()
             .await?;
 
-        if submit_res.status() != 200 {
-            log::debug!("Submit transfer response: {:?}", submit_res);
+        if res.status() != 200 {
+            log::debug!("Submit transfer response: {:?}", res);
             bail!(TransferError::Step7Failed);
         }
 
+        Ok(())
+    }
+
+    /// Set the transfer reason (step 10)
+    async fn set_transfer_reason(
+        &self,
+        from_account: &str,
+        transfer_id: &str,
+        flow_instance: &str,
+        transfer_reason: &str,
+    ) -> Result<()> {
         let data = reqwest::multipart::Form::new()
             .text(
                 "flow_ImmediateCashTransfer_instance",
                 flow_instance.to_string(),
             )
             .text("flow_ImmediateCashTransfer_step", "9".to_string())
-            .text("Characteristics[label]", transfer_reason) // Reason for transfer
+            .text("Characteristics[label]", transfer_reason.to_string())
             .text("Characteristics[schedulingType]", "1".to_string()) // 1 = unique
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
@@ -197,13 +219,23 @@ impl BoursoWebClient {
             BASE_URL, from_account, transfer_id
         );
 
-        let set_reason_res = self.client.post(&url).multipart(data).send().await?;
+        let res = self.client.post(&url).multipart(data).send().await?;
 
-        if set_reason_res.status() != 200 {
-            log::debug!("Set reason response: {:?}", set_reason_res);
+        if res.status() != 200 {
+            log::debug!("Set reason response: {:?}", res);
             bail!(TransferError::SetReasonFailed);
         }
 
+        Ok(())
+    }
+
+    /// Confirm and finalize the transfer (step 12)
+    async fn confirm_transfer(
+        &self,
+        from_account: &str,
+        transfer_id: &str,
+        flow_instance: &str,
+    ) -> Result<()> {
         let data = reqwest::multipart::Form::new()
             .text(
                 "flow_ImmediateCashTransfer_instance",
@@ -214,7 +246,7 @@ impl BoursoWebClient {
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("submit", "".to_string());
 
-        let confirm_res = self
+        let res = self
             .client
             .post(format!(
                 "{}/compte/cav/{}/virements/immediat/nouveau/{}/12",
@@ -224,12 +256,12 @@ impl BoursoWebClient {
             .send()
             .await?;
 
-        if confirm_res.status() != 200 {
-            log::debug!("Confirm transfer response: {:?}", confirm_res);
+        if res.status() != 200 {
+            log::debug!("Confirm transfer response: {:?}", res);
             bail!(TransferError::SubmitTransferFailed);
         }
 
-        let body = confirm_res.text().await?;
+        let body = res.text().await?;
 
         if body.as_str().contains("Confirmation") {
             Ok(())
@@ -237,5 +269,89 @@ impl BoursoWebClient {
             log::debug!("Cannot find confirmation message in response {:?}", body);
             bail!(TransferError::InvalidTransfer);
         }
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub async fn transfer_funds(
+        &self,
+        amount: f64,
+        from_account: Account,
+        to_account: Account,
+        reason: Option<&str>,
+    ) -> Result<()> {
+        // Minimum amount is 10 EUR
+        if amount < 10.0 {
+            bail!(TransferError::AmountTooLow);
+        }
+
+        log::debug!(
+            "Initiating transfer of {:.2} EUR from account {} to account {}",
+            amount,
+            from_account.id,
+            to_account.id
+        );
+
+        let transfer_from_banking = from_account.kind == AccountKind::Banking;
+        let from_account_id = &from_account.id;
+        let to_account_id = &to_account.id;
+
+        // Default reason if none provided, else use provided reason and
+        // warn if the reason is too long (> 50 characters)
+        let transfer_reason = if let Some(r) = reason {
+            if r.len() > 50 {
+                bail!(TransferError::ReasonIsTooLong);
+            }
+            r.to_string()
+        } else {
+            "Virement depuis BoursoBank".to_string()
+        };
+
+        // Step 1: Initialize transfer and get transfer ID
+        let transfer_id = self.init_transfer(from_account_id).await?;
+
+        // Extract flow instance
+        let flow_instance = self
+            .extract_flow_instance(&format!(
+                "{}/compte/cav/{}/virements/immediat/nouveau/{}/1",
+                BASE_URL, from_account_id, transfer_id
+            ))
+            .await?;
+
+        // Step 2: Set debit account
+        self.set_debit_account(from_account_id, &transfer_id, &flow_instance)
+            .await?;
+
+        // Step 3: Set credit account
+        self.set_credit_account(
+            from_account_id,
+            to_account_id,
+            &transfer_id,
+            &flow_instance,
+            transfer_from_banking,
+        )
+        .await?;
+
+        // Step 6: Set amount
+        self.set_transfer_amount(from_account_id, &transfer_id, &flow_instance, amount)
+            .await?;
+
+        // Step 7: Submit
+        self.submit_step_7(from_account_id, &transfer_id, &flow_instance)
+            .await?;
+
+        // Step 10: Set reason
+        self.set_transfer_reason(
+            from_account_id,
+            &transfer_id,
+            &flow_instance,
+            &transfer_reason,
+        )
+        .await?;
+
+        // Step 12: Confirm transfer
+        self.confirm_transfer(from_account_id, &transfer_id, &flow_instance)
+            .await?;
+
+        Ok(())
     }
 }
