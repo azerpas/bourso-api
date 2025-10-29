@@ -316,8 +316,10 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 let filled = (bar_length as f32 * step as f32 / total as f32) as usize;
                 let bar: String = "█".repeat(filled) + &"░".repeat(bar_length - filled);
 
+                // Use ANSI escape code to clear the line before printing
+                // \x1B[2K clears the entire line, \r returns cursor to start
                 print!(
-                    "\r[{}] {:3}% - {}/{} - {}",
+                    "\x1B[2K\r[{}] {:3}% - {}/{} - {}",
                     bar,
                     percentage,
                     step,
