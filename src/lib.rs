@@ -12,9 +12,10 @@ use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
 use tracing::{debug, info, warn};
 
-mod settings;
+pub mod settings;
+pub mod validate;
+
 use settings::{get_settings, save_settings, Settings};
-mod validate;
 
 #[cfg(not(tarpaulin_include))]
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {

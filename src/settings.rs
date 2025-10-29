@@ -14,7 +14,6 @@ pub struct Settings {
 
 #[cfg(not(tarpaulin_include))]
 impl Settings {
-    #[allow(dead_code)] // Not sure why, but rustc thinks this is unused
     pub fn load(path: &str) -> Result<Settings> {
         let file_content = match fs::read_to_string(path) {
             Ok(data) => data,
@@ -35,7 +34,6 @@ impl Settings {
 }
 
 #[cfg(not(tarpaulin_include))]
-#[allow(dead_code)] // Not sure why, but rustc thinks this is unused
 pub fn get_settings() -> Result<Settings> {
     let user_dirs = UserDirs::new().context("Failed to get user directories")?;
     let mut path = user_dirs.home_dir().to_path_buf();
@@ -66,7 +64,6 @@ pub fn get_settings() -> Result<Settings> {
 
 /// Save the settings to the settings file, if it doesn't exist, create it
 #[cfg(not(tarpaulin_include))]
-#[allow(dead_code)] // Not sure why, but rustc thinks this is unused
 pub fn save_settings(settings: &Settings) -> Result<()> {
     let user_dirs = UserDirs::new().context("Failed to get user directories")?;
     let mut path = user_dirs.home_dir().to_path_buf();
