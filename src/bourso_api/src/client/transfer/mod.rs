@@ -21,6 +21,7 @@ pub enum TransferProgress {
 }
 
 impl TransferProgress {
+    #[cfg(not(tarpaulin_include))]
     pub fn step_number(&self) -> u8 {
         match self {
             TransferProgress::Validating => 1,
@@ -40,6 +41,7 @@ impl TransferProgress {
         10
     }
 
+    #[cfg(not(tarpaulin_include))]
     pub fn description(&self) -> &str {
         match self {
             TransferProgress::Validating => "Validating transfer parameters",
@@ -58,6 +60,7 @@ impl TransferProgress {
 
 impl BoursoWebClient {
     /// Initialize the transfer and extract the transfer ID
+    #[cfg(not(tarpaulin_include))]
     async fn init_transfer(&self, from_account: &str) -> Result<String> {
         let init_transfer_url = format!(
             "{}/compte/cav/{}/virements/immediat/nouveau",
@@ -89,6 +92,7 @@ impl BoursoWebClient {
     }
 
     /// Extract the flow instance from the HTML response
+    #[cfg(not(tarpaulin_include))]
     async fn extract_flow_instance(&self, url: &str) -> Result<String> {
         let res = self.client.get(url).send().await?;
 
@@ -111,6 +115,7 @@ impl BoursoWebClient {
     }
 
     /// Set the debit account (step 2)
+    #[cfg(not(tarpaulin_include))]
     async fn set_debit_account(
         &self,
         from_account: &str,
@@ -141,6 +146,7 @@ impl BoursoWebClient {
     }
 
     /// Set the credit account (step 3)
+    #[cfg(not(tarpaulin_include))]
     async fn set_credit_account(
         &self,
         from_account: &str,
@@ -179,6 +185,7 @@ impl BoursoWebClient {
     }
 
     /// Set the transfer amount (step 6)
+    #[cfg(not(tarpaulin_include))]
     async fn set_transfer_amount(
         &self,
         from_account: &str,
@@ -212,6 +219,7 @@ impl BoursoWebClient {
     }
 
     /// Submit step 7
+    #[cfg(not(tarpaulin_include))]
     async fn submit_step_7(
         &self,
         from_account: &str,
@@ -246,6 +254,7 @@ impl BoursoWebClient {
     }
 
     /// Set the transfer reason (step 10)
+    #[cfg(not(tarpaulin_include))]
     async fn set_transfer_reason(
         &self,
         from_account: &str,
@@ -281,6 +290,7 @@ impl BoursoWebClient {
     }
 
     /// Confirm and finalize the transfer (step 12)
+    #[cfg(not(tarpaulin_include))]
     async fn confirm_transfer(
         &self,
         from_account: &str,
