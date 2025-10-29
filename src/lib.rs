@@ -10,7 +10,7 @@ use bourso_api::{
 };
 use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
-use log::{info, warn};
+use tracing::{debug, info, warn};
 
 mod settings;
 use settings::{get_settings, save_settings, Settings};
@@ -18,8 +18,6 @@ mod validate;
 
 #[cfg(not(tarpaulin_include))]
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
-    use log::debug;
-
     let settings = match matches.get_one::<String>("credentials") {
         Some(credentials_path) => Settings::load(credentials_path)?,
         None => get_settings()?,
@@ -70,16 +68,20 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
             match quote_matches.subcommand() {
                 Some(("highest", _)) => {
-                    info!("Highest quote: {:#?}", quotes.d.get_highest_value());
+                    let highest_quote = quotes.d.get_highest_value();
+                    info!(highest_quote, "Highest quote: {:#?}", highest_quote);
                 }
                 Some(("lowest", _)) => {
-                    info!("Lowest quote: {:#?}", quotes.d.get_lowest_value());
+                    let lowest_quote = quotes.d.get_lowest_value();
+                    info!(lowest_quote, "Lowest quote: {:#?}", lowest_quote);
                 }
                 Some(("volume", _)) => {
-                    info!("Volume: {:#?}", quotes.d.get_volume());
+                    let volume = quotes.d.get_volume();
+                    info!(volume, "Volume: {:#?}", volume);
                 }
                 Some(("average", _)) => {
-                    info!("Average quote: {:#?}", quotes.d.get_average_value());
+                    let average_quote = quotes.d.get_average_value();
+                    info!(average_quote, "Average quote: {:#?}", average_quote);
                 }
                 Some(("last", _)) => {
                     let quote: QuoteTab;
@@ -92,7 +94,8 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                     }
 
                     info!(
-                        "Last quote: current: {}, open: {}, high: {}, low: {}, volume: {}",
+                        close = quote.close, open = quote.open, high = quote.high, low = quote.low, volume = quote.volume,
+                        "Last quote: current: {:#?}, open: {:#?}, high: {:#?}, low: {:#?}, volume: {:#?}",
                         quote.close, quote.open, quote.high, quote.low, quote.volume
                     );
                 }
@@ -100,13 +103,9 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                     info!("Quotes:");
                     for quote in quotes.d.quote_tab.iter() {
                         info!(
-                            "Quote day {}: Close: {}, Open: {}, High: {}, Low: {}, Volume: {}",
-                            quote.date,
-                            quote.close,
-                            quote.open,
-                            quote.high,
-                            quote.low,
-                            quote.volume
+                            date = quote.date, close = quote.close, open = quote.open, high = quote.high, low = quote.low, volume = quote.volume,
+                            "Quote day {:#?}: Close: {:#?}, Open: {:#?}, High: {:#?}, Low: {:#?}, Volume: {:#?}",
+                            quote.date, quote.close, quote.open, quote.high, quote.low, quote.volume,
                         );
                     }
                 }
