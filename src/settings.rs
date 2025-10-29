@@ -61,12 +61,6 @@ pub fn get_settings() -> Result<Settings> {
             e
         )
     })?;
-    let settings: Settings = serde_json::from_str(&file_content).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to deserialize settings: {}\nPlease make sure the settings file is valid.",
-            e
-        )
-    })?;
     Ok(settings)
 }
 

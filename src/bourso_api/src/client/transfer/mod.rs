@@ -3,6 +3,7 @@ use crate::account::{Account, AccountKind};
 use crate::{client::transfer::error::TransferError, client::BoursoWebClient, constants::BASE_URL};
 use anyhow::{bail, Context, Result};
 use futures_util::stream::Stream;
+use tracing::debug;
 
 mod error;
 
@@ -70,7 +71,7 @@ impl BoursoWebClient {
         let res = self.client.get(&init_transfer_url).send().await?;
 
         if res.status() != 302 {
-            log::debug!("Init transfer response: {:?}", res);
+            debug!("Init transfer response: {:?}", res);
             bail!(TransferError::TransferInitiationFailed);
         }
 
@@ -327,7 +328,7 @@ impl BoursoWebClient {
         if body.as_str().contains("Confirmation") {
             Ok(())
         } else {
-            log::debug!("Cannot find confirmation message in response {:?}", body);
+            debug!("Cannot find confirmation message in response {:?}", body);
             bail!(TransferError::InvalidTransfer);
         }
     }
