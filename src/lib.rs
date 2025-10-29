@@ -9,7 +9,7 @@ use bourso_api::{
     get_client,
 };
 use clap::ArgMatches;
-use futures_util::StreamExt;
+use futures_util::{pin_mut, StreamExt};
 use log::{info, warn};
 
 mod settings;
@@ -301,7 +301,6 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 reason.map(|s| s.to_string()),
             );
 
-            use futures_util::pin_mut;
             pin_mut!(stream);
 
             // Track progress and update display
