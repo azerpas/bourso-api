@@ -1,16 +1,10 @@
 use anyhow::Result;
 use bourso_api::client::trade::order::OrderSide;
+use bourso_cli::{settings::init_logger, validate::validate_account_id};
 use clap::{
     builder::{PossibleValue, ValueParser},
     Arg, Command,
 };
-
-use validate::validate_account_id;
-
-use crate::settings::init_logger;
-
-mod settings;
-mod validate;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,10 +15,7 @@ async fn main() -> Result<()> {
     let account_arg = Arg::new("account")
         .short('a')
         .long("account")
-        .help(
-            r#"The account to use by its 'id' (e.g: 'e51f635524a7d506e4d4a7a8088b6278').
-    You can get this info with the command `bourso accounts`"#,
-        )
+        .help("The account to use by its 'id' (e.g: 'e51f635524a7d506e4d4a7a8088b6278'). You can get this info with the command `bourso accounts`")
         .value_parser(clap::value_parser!(String)) // Enforce input as String
         .value_parser(ValueParser::new(validate_account_id))
         .required(true);
