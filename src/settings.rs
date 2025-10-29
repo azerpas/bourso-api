@@ -75,8 +75,6 @@ pub fn save_settings(settings: &Settings) -> Result<()> {
     let json = serde_json::to_string_pretty(settings).context("Failed to serialize settings")?;
     file.write_all(json.as_bytes())
         .context("Failed to write settings file")?;
-    file.write_all(json.as_bytes())
-        .context("Failed to write settings file")?;
     Ok(())
 }
 
