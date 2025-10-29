@@ -294,7 +294,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 .find(|a| a.id == to_account_id)
                 .context("To account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
 
-            let stream = web_client.transfer_funds_with_progress(
+            let stream = web_client.transfer_funds(
                 amount,
                 from_account.clone(),
                 to_account.clone(),

@@ -322,8 +322,18 @@ impl BoursoWebClient {
         }
     }
 
+    /// Transfer funds from one account to another, yielding progress updates
+    ///
+    /// ## Arguments
+    /// - `amount`: Amount to transfer (must be >= 10.0)
+    /// - `from_account`: Source account
+    /// - `to_account`: Destination account
+    /// - `reason`: Optional reason for the transfer (max 50 characters)
+    ///
+    /// ## Returns
+    /// A stream of progress updates for the transfer.
     #[cfg(not(tarpaulin_include))]
-    pub fn transfer_funds_with_progress(
+    pub fn transfer_funds(
         &self,
         amount: f64,
         from_account: Account,
