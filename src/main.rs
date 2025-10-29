@@ -5,7 +5,6 @@ use clap::{
     Arg, Command,
 };
 
-use log::debug;
 use validate::validate_account_id;
 
 use crate::settings::init_logger;
@@ -16,9 +15,8 @@ mod validate;
 #[tokio::main]
 async fn main() -> Result<()> {
     const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
-    debug!("Version: {:?}", VERSION);
 
-    init_logger()?;
+    let _guard = init_logger()?;
 
     let account_arg = Arg::new("account")
         .short('a')
