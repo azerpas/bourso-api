@@ -16,7 +16,6 @@ directories = { version = "5.0.1" }
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = { version = "1.0.107" }
 tracing = { version = "0.1.41" }
-tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = [
     "fmt",
     "env-filter",
