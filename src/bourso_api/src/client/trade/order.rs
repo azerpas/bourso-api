@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
-use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::{debug, info};
 
 use crate::{
     account::{Account, AccountKind},
@@ -89,8 +89,15 @@ impl BoursoWebClient {
             .await?;
 
         info!(
-            "Order for {} {} successfully passed with ID {} ✅",
-            quantity, symbol, response.order_id
+            quantity,
+            symbol,
+            order_id = response.order_id,
+            order_price_limit = order_data.order_price_limit,
+            "Order for {} {} successfully passed with ID {} at price {:?} ✅",
+            quantity,
+            symbol,
+            response.order_id,
+            order_data.order_price_limit
         );
 
         Ok((response.order_id, order_data.order_price_limit))
