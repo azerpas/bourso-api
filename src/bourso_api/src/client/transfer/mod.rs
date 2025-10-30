@@ -98,7 +98,7 @@ impl BoursoWebClient {
         let res = self.client.get(url).send().await?;
 
         if res.status() != 200 {
-            log::debug!("First transfer step response: {:?}", res);
+            debug!("First transfer step response: {:?}", res);
             bail!(TransferError::TransferInitiationFailed);
         }
 
@@ -139,7 +139,7 @@ impl BoursoWebClient {
         let res = self.client.post(&url).multipart(data).send().await?;
 
         if res.status() != 200 {
-            log::debug!("Set debit account response: {:?}", res);
+            debug!("Set debit account response: {:?}", res);
             bail!(TransferError::SetDebitAccountFailed);
         }
 
@@ -178,7 +178,7 @@ impl BoursoWebClient {
         let res = self.client.post(&url).multipart(data).send().await?;
 
         if res.status() != 200 {
-            log::debug!("Set credit account response: {:?}", res);
+            debug!("Set credit account response: {:?}", res);
             bail!(TransferError::SetCreditAccountFailed);
         }
 
@@ -212,7 +212,7 @@ impl BoursoWebClient {
         let res = self.client.post(&url).multipart(data).send().await?;
 
         if res.status() != 200 {
-            log::debug!("Set amount response: {:?}", res);
+            debug!("Set amount response: {:?}", res);
             bail!(TransferError::SetAmountFailed);
         }
 
@@ -247,7 +247,7 @@ impl BoursoWebClient {
             .await?;
 
         if res.status() != 200 {
-            log::debug!("Submit transfer response: {:?}", res);
+            debug!("Submit transfer response: {:?}", res);
             bail!(TransferError::Step7Failed);
         }
 
@@ -283,7 +283,7 @@ impl BoursoWebClient {
         let res = self.client.post(&url).multipart(data).send().await?;
 
         if res.status() != 200 {
-            log::debug!("Set reason response: {:?}", res);
+            debug!("Set reason response: {:?}", res);
             bail!(TransferError::SetReasonFailed);
         }
 
@@ -319,7 +319,7 @@ impl BoursoWebClient {
             .await?;
 
         if res.status() != 200 {
-            log::debug!("Confirm transfer response: {:?}", res);
+            debug!("Confirm transfer response: {:?}", res);
             bail!(TransferError::SubmitTransferFailed);
         }
 
@@ -360,7 +360,7 @@ impl BoursoWebClient {
                 return;
             }
 
-            log::debug!(
+            debug!(
                 "Initiating transfer of {:.2} EUR from account {} to account {}",
                 amount,
                 from_account.id,
