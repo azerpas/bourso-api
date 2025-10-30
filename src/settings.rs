@@ -78,10 +78,9 @@ pub fn save_settings(settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-pub fn init_logger() -> Result<tracing_appender::non_blocking::WorkerGuard> {
+pub fn init_logger() -> Result<()> {
     use std::io::IsTerminal;
     use std::{fs, io};
-    use tracing_appender::non_blocking;
     use tracing_subscriber::filter::LevelFilter;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -93,14 +92,6 @@ pub fn init_logger() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     path.push(".bourso");
     fs::create_dir_all(&path)?;
     path.push("bourso.log");
-
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .context("Failed to ~/.bourso/bourso.log")?;
-
-    let (non_blocking, guard) = non_blocking(file);
 
     // Pretty console (stderr), filtered by RUST_LOG
     let console_layer = fmt::layer()
@@ -121,8 +112,15 @@ pub fn init_logger() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         .with_filter(env_filter.clone());
 
     // JSON file (capture everything)
+    let log_path = path.clone();
     let json_layer = fmt::layer()
-        .with_writer(non_blocking)
+        .with_writer(move || {
+            fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .expect("open ~/.bourso/bourso.log")
+        })
         .json()
         .with_target(true)
         .with_level(true)
@@ -134,5 +132,5 @@ pub fn init_logger() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         .with(json_layer)
         .init();
 
-    Ok(guard)
+    Ok(())
 }

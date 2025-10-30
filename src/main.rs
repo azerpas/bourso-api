@@ -10,7 +10,7 @@ use clap::{
 async fn main() -> Result<()> {
     const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
 
-    let _guard = init_logger()?;
+    init_logger()?;
 
     let account_arg = Arg::new("account")
         .short('a')
