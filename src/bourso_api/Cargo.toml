@@ -1,24 +1,24 @@
 [package]
-name = "bourso_api"
+name    = "bourso_api"
 version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12.12", features = ["multipart", "cookies"] }
-anyhow = { version = "1.0.75" }
-regex = { version = "1.10.2" }
-lazy_static = { version = "1.4.0" }
-clap = { version = "4.5.26", features = ["derive"] }
-serde = { version = "1.0.189", features = ["derive"] }
-serde_json = { version = "1.0.107" }
-reqwest_cookie_store = "0.8.0"
-cookie_store = "0.21.1"
-chrono = { version = "0.4.39" }
-log = { version = "0.4.20" }
-futures-util = "0.3.31"
-async-stream = "0.3.6"
+reqwest              = { version = "0.12.12", features = ["multipart", "cookies"] }
+anyhow               = { version = "1.0.75" }
+regex                = { version = "1.10.2" }
+lazy_static          = { version = "1.4.0" }
+clap                 = { version = "4.5.26", features = ["derive"] }
+serde                = { version = "1.0.189", features = ["derive"] }
+serde_json           = { version = "1.0.107" }
+reqwest_cookie_store = { version = "0.8.0" }
+cookie_store         = { version = "0.21.1" }
+chrono               = { version = "0.4.39" }
+log                  = { version = "0.4.20" }
+futures-util         = { version = "0.3.31" }
+async-stream         = { version = "0.3.6" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
