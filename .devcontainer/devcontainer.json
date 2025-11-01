@@ -14,6 +14,7 @@
                 "terminal.integrated.defaultProfile.linux": "zsh",
                 "rust-analyzer.check.command": "clippy",
                 "evenBetterToml.formatter.alignEntries": true,
+                "evenBetterToml.formatter.columnWidth": 100,
                 "[rust]": {
                     "editor.defaultFormatter": "rust-lang.rust-analyzer"
                 },
