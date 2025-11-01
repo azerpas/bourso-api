@@ -1,5 +1,9 @@
 {
     "name": "Rust [minimal]",
+    "runArgs": [
+        "--name",
+        "bourso-api-dev"
+    ],
     "image": "mcr.microsoft.com/devcontainers/rust:latest",
     "remoteUser": "vscode",
     "postCreateCommand": "rustup component add clippy rustfmt",
