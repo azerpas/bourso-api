@@ -16,7 +16,7 @@ serde_json           = { version = "1.0.107" }
 reqwest_cookie_store = { version = "0.8.0" }
 cookie_store         = { version = "0.21.1" }
 chrono               = { version = "0.4.39" }
-log                  = { version = "0.4.20" }
+tracing              = { version = "0.1.41" }
 futures-util         = { version = "0.3.31" }
 async-stream         = { version = "0.3.6" }
 

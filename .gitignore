@@ -1,7 +1,6 @@
 *.chls
 *.chlz
 
-
 # Added by cargo
 
 /target
