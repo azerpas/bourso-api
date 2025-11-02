@@ -8,8 +8,8 @@ use crate::{
 use super::BoursoWebClient;
 
 use anyhow::{Context, Result};
-use log::debug;
 use regex::Regex;
+use tracing::debug;
 
 impl BoursoWebClient {
     /// Get the accounts list.

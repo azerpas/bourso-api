@@ -11,10 +11,10 @@ use std::sync::Arc;
 use anyhow::{bail, Result};
 use cookie_store::Cookie;
 use error::ClientError;
-use log::{debug, error, info};
 use regex::Regex;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info};
 
 use self::config::{extract_brs_config, Config};
 
