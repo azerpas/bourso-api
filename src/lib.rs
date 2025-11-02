@@ -211,7 +211,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
     match matches.subcommand() {
         Some(("accounts", sub_matches)) => {
-            if sub_matches.contains_id("bank") {
+            if sub_matches.contains_id("banking") {
                 accounts = web_client.get_accounts(Some(AccountKind::Banking)).await?;
             } else if sub_matches.contains_id("saving") {
                 accounts = web_client.get_accounts(Some(AccountKind::Savings)).await?;

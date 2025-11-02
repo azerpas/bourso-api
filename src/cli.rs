@@ -2,7 +2,7 @@ use bourso_api::client::trade::order::OrderSide;
 use clap::{value_parser, Args, Parser, Subcommand};
 
 // TODO: add debug option
-// TODO: add type to fix primitive obsession (AccountId w/ FromStr impl)
+// TODO: add type to fix primitive obsession (AccountId w/ FromStr impl) and value_parser
 
 #[derive(Parser)]
 #[command(version, author, about, long_about = None)]
