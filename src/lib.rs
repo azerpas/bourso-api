@@ -14,7 +14,6 @@ use tracing::{debug, info, warn};
 
 pub mod cli;
 pub mod settings;
-pub mod validate;
 
 use settings::{get_settings, save_settings, Settings};
 

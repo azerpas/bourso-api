@@ -1,8 +1,8 @@
 use bourso_api::client::trade::order::OrderSide;
-use clap::{Args, Parser, Subcommand};
+use clap::{value_parser, Args, Parser, Subcommand};
 
 // TODO: add debug option
-// TODO: add value parser to validate account ID
+// TODO: add type to fix primitive obsession (AccountId w/ FromStr impl)
 
 #[derive(Parser)]
 #[command(version, author, about, long_about = None)]
@@ -94,23 +94,21 @@ pub struct OrderListArgs {}
 
 #[derive(Args)]
 pub struct OrderNewArgs {
-    /// The account to use by its ID (32 hex chars) (e.g: "e51f635524a7d506e4d4a7a8088b6278")
-    ///
-    /// You can get your account ID with the `bourso accounts` command
-    #[arg(short, long, value_name = "ID")]
+    /// Account to use by its ID (32 hex chars), you can get it with the `bourso accounts` command
+    #[arg(short, long, value_name = "ID", value_parser = parse_account_id)]
     pub account: String,
 
-    /// The side of the order (buy/sell)
+    /// Side of the order (buy/sell)
     #[arg(long, value_parser = clap::value_parser!(OrderSide))]
     pub side: OrderSide,
 
-    /// The symbol ID of the order (e.g: "1rTCW8")
+    /// Symbol ID of the order (e.g: "1rTCW8")
     #[arg(long, value_name = "ID")]
     pub symbol: String,
 
-    /// The quantity of the order (e.g: 1)
-    #[arg(short, long)]
-    pub quantity: usize,
+    /// Quantity of the order (e.g: 1)
+    #[arg(short, long, value_parser = value_parser!(u64).range(1..))]
+    pub quantity: u64,
 }
 
 #[derive(Args)]
@@ -118,11 +116,11 @@ pub struct OrderCancelArgs {}
 
 #[derive(Args)]
 pub struct QuoteArgs {
-    /// The symbol ID of the stock (e.g: "1rTCW8")
+    /// Symbol ID of the stock (e.g: "1rTCW8")
     #[arg(long, value_name = "ID")]
     pub symbol: String,
 
-    /// The length period of the stock (1, 5, 30, 90, 180, 365, 1825, 3650)
+    /// Length period of the stock (1, 5, 30, 90, 180, 365, 1825, 3650)
     #[arg(
         long,
         default_value = "30",
@@ -130,7 +128,7 @@ pub struct QuoteArgs {
     )]
     pub length: String,
 
-    /// The interval of the stock (use "0" for default)
+    /// Interval of the stock (use "0" for default)
     #[arg(long, default_value = "0", value_parser = ["0"])]
     pub interval: String,
 
@@ -152,25 +150,34 @@ pub enum QuoteView {
     /// Get the volume of the stock for the given length and interval
     Volume,
 
-    /// Get the last value of the stock, sets `length=0` and `interval=0`
+    /// Get the last value of the stock, sets `length=1` and `interval=0`
     Last,
 }
 
 #[derive(Args)]
 pub struct TransferArgs {
-    /// The source account ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(long = "from", value_name = "ID")]
+    /// Source account ID (32 hex chars), you can get it with the `bourso accounts` command
+    #[arg(long = "from", value_name = "ID", value_parser = parse_account_id)]
     pub from_account: String,
 
-    /// The destination account ID (32 hex chars), you can getit with the `bourso accounts` command
-    #[arg(long = "to", value_name = "ID")]
+    /// Destination account ID (32 hex chars), you can get it with the `bourso accounts` command
+    #[arg(long = "to", value_name = "ID", value_parser = parse_account_id)]
     pub to_account: String,
 
-    /// The amount to transfer
+    /// Amount to transfer
     #[arg(long)]
     pub amount: String,
 
-    /// The reason for the transfer (max 50 chars)
+    /// Reason for the transfer (max 50 chars)
     #[arg(long)]
     pub reason: Option<String>,
+}
+
+fn parse_account_id(s: &str) -> Result<String, String> {
+    let t = s.trim();
+    if t.len() == 32 && t.chars().all(|c| c.is_ascii_hexdigit()) {
+        Ok(t.to_owned())
+    } else {
+        Err("Account ID must be 32 hex characters (0-9, a-f)".into())
+    }
 }
