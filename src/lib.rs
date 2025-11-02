@@ -211,13 +211,13 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
     match matches.subcommand() {
         Some(("accounts", sub_matches)) => {
-            if sub_matches.contains_id("banking") {
+            if sub_matches.get_flag("banking") {
                 accounts = web_client.get_accounts(Some(AccountKind::Banking)).await?;
-            } else if sub_matches.contains_id("saving") {
+            } else if sub_matches.get_flag("saving") {
                 accounts = web_client.get_accounts(Some(AccountKind::Savings)).await?;
-            } else if sub_matches.contains_id("trading") {
+            } else if sub_matches.get_flag("trading") {
                 accounts = web_client.get_accounts(Some(AccountKind::Trading)).await?;
-            } else if sub_matches.contains_id("loans") {
+            } else if sub_matches.get_flag("loans") {
                 accounts = web_client.get_accounts(Some(AccountKind::Loans)).await?;
             } else {
                 accounts = web_client.get_accounts(None).await?;
