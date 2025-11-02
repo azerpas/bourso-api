@@ -12,6 +12,7 @@ use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
 use tracing::{debug, info, warn};
 
+pub mod cli;
 pub mod settings;
 pub mod validate;
 
@@ -267,7 +268,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
             accounts = web_client.get_accounts(None).await?;
 
             let from_account_id = transfer_matches
-                .get_one::<String>("account")
+                .get_one::<String>("from_account")
                 .map(|s| s.as_str())
                 .unwrap();
             let to_account_id = transfer_matches
