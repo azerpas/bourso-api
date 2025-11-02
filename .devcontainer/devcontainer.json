@@ -1,0 +1,40 @@
+{
+    "name": "Rust [minimal]",
+    "runArgs": [
+        "--name",
+        "bourso-api-dev"
+    ],
+    "image": "mcr.microsoft.com/devcontainers/rust:latest",
+    "remoteUser": "vscode",
+    "postCreateCommand": "rustup component add clippy rustfmt",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "editor.formatOnSave": true,
+                "terminal.integrated.defaultProfile.linux": "zsh",
+                "rust-analyzer.check.command": "clippy",
+                "evenBetterToml.formatter.alignEntries": true,
+                "[rust]": {
+                    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+                },
+                "[toml]": {
+                    "editor.defaultFormatter": "tamasfe.even-better-toml"
+                }
+            },
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "vadimcn.vscode-lldb",
+                "tamasfe.even-better-toml",
+                "fill-labs.dependi",
+                "github.vscode-github-actions"
+            ]
+        }
+    },
+    "features": {
+        "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
+            "plugins": "git golang zsh-autosuggestions zsh-syntax-highlighting",
+            "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions https://github.com/zsh-users/zsh-syntax-highlighting",
+            "username": "vscode"
+        }
+    }
+}
