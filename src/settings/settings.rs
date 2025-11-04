@@ -25,10 +25,6 @@ pub struct FileSettingsStore {
 }
 
 impl FileSettingsStore {
-    /// Build from ProjectDirs config directory:
-    ///   - Windows:   %APPDATA%\<qualifier>\<org>\<app>\settings.json
-    ///   - macOS:     ~/Library/Application Support/<app>/settings.json
-    ///   - Linux:     ~/.config/<app>/settings.json
     pub fn new() -> Result<Self> {
         let project_dirs = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_NAME)
             .ok_or_else(|| anyhow!("Could not determine project directories"))?;
