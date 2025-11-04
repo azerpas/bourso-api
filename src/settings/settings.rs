@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 use std::{fs, path::PathBuf};
 
+const SETTINGS_QUALIFIER: &str = "";
+const SETTINGS_ORGANIZATION: &str = "bourso";
+const SETTINGS_APPLICATION: &str = "bourso-cli";
+const SETTINGS_FILE: &str = "settings.json";
+
 #[derive(Serialize, Deserialize, Default)]
 pub struct Settings {
     #[serde(rename = "clientNumber")]
@@ -18,31 +23,27 @@ pub trait SettingsStore {
 }
 
 pub struct FileSettingsStore {
-    directory: PathBuf, // injected base directory (e.g., platform config directory)
-    file: &'static str, // e.g., "settings.json"
+    directory: PathBuf, // platform config directory (from ProjectDirs)
+    file: &'static str, // "settings.json"
 }
 
 impl FileSettingsStore {
-    pub fn new(directory: PathBuf) -> Self {
-        Self {
-            directory,
-            file: "settings.json",
-        }
-    }
-
-    /// Convenience: build from ProjectDirs config directory.
-    /// `qualifier` can be "" if you don’t have one. Example:
+    /// Build from ProjectDirs config directory:
     ///   - Windows:   %APPDATA%\<qualifier>\<org>\<app>\settings.json
     ///   - macOS:     ~/Library/Application Support/<app>/settings.json
     ///   - Linux:     ~/.config/<app>/settings.json
-    pub fn from_project_dirs(
-        qualifier: &str,
-        organization: &str,
-        application: &str,
-    ) -> Result<Self> {
-        let project_directories = ProjectDirs::from(qualifier, organization, application)
-            .ok_or_else(|| anyhow!("Could not determine project directories"))?;
-        Ok(Self::new(project_directories.config_dir().to_path_buf()))
+    pub fn new() -> Result<Self> {
+        let project_dirs = ProjectDirs::from(
+            SETTINGS_QUALIFIER,
+            SETTINGS_ORGANIZATION,
+            SETTINGS_APPLICATION,
+        )
+        .ok_or_else(|| anyhow!("Could not determine project directories"))?;
+
+        Ok(Self {
+            directory: project_dirs.config_dir().to_path_buf(),
+            file: SETTINGS_FILE,
+        })
     }
 
     fn path(&self) -> PathBuf {
