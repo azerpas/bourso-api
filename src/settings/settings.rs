@@ -4,10 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 use std::{fs, path::PathBuf};
 
-const SETTINGS_QUALIFIER: &str = "";
-const SETTINGS_ORGANIZATION: &str = "bourso";
-const SETTINGS_APPLICATION: &str = "bourso-cli";
-const SETTINGS_FILE: &str = "settings.json";
+use crate::settings::consts::{APP_NAME, APP_ORGANIZATION, APP_QUALIFIER, SETTINGS_FILE};
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Settings {
@@ -33,12 +30,8 @@ impl FileSettingsStore {
     ///   - macOS:     ~/Library/Application Support/<app>/settings.json
     ///   - Linux:     ~/.config/<app>/settings.json
     pub fn new() -> Result<Self> {
-        let project_dirs = ProjectDirs::from(
-            SETTINGS_QUALIFIER,
-            SETTINGS_ORGANIZATION,
-            SETTINGS_APPLICATION,
-        )
-        .ok_or_else(|| anyhow!("Could not determine project directories"))?;
+        let project_dirs = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_NAME)
+            .ok_or_else(|| anyhow!("Could not determine project directories"))?;
 
         Ok(Self {
             directory: project_dirs.config_dir().to_path_buf(),
