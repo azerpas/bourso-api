@@ -1,10 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::{Context, Result};
-use bourso_api::client::{error::ClientError, BoursoWebClient};
+use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::settings::SettingsStore;
+use bourso_api::client::{error::ClientError, BoursoWebClient};
 
 // TODO: fix naming, too many mismatches with customer_id / username / client_id / client_number
 // TODO: does it make sense to have MFA handling in the CLI?
