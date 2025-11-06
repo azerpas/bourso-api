@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::settings::SettingsStore;
@@ -11,22 +10,35 @@ use bourso_api::client::{error::ClientError, BoursoWebClient};
 pub trait CredentialsProvider: Send + Sync {
     fn read_password(&self, prompt: &str) -> Result<String>;
 }
+pub struct StdinCredentialsProvider;
+impl CredentialsProvider for StdinCredentialsProvider {
+    fn read_password(&self, prompt: &str) -> Result<String> {
+        println!("{prompt}");
+        Ok(rpassword::read_password()?)
+    }
+}
 
 pub trait ClientFactory: Send + Sync {
     fn new_client(&self) -> BoursoWebClient;
 }
+pub struct DefaultClientFactory;
+impl ClientFactory for DefaultClientFactory {
+    fn new_client(&self) -> BoursoWebClient {
+        bourso_api::get_client()
+    }
+}
 
 pub struct AuthService {
-    settings_store: Arc<dyn SettingsStore + Send + Sync>,
-    credentials_provider: Arc<dyn CredentialsProvider>,
-    client_factory: Arc<dyn ClientFactory>,
+    settings_store: Box<dyn SettingsStore>,
+    credentials_provider: Box<dyn CredentialsProvider>,
+    client_factory: Box<dyn ClientFactory>,
 }
 
 impl AuthService {
     pub fn new(
-        settings_store: Arc<dyn SettingsStore + Send + Sync>,
-        credentials_provider: Arc<dyn CredentialsProvider>,
-        client_factory: Arc<dyn ClientFactory>,
+        settings_store: Box<dyn SettingsStore>,
+        credentials_provider: Box<dyn CredentialsProvider>,
+        client_factory: Box<dyn ClientFactory>,
     ) -> Self {
         Self {
             settings_store,
@@ -35,11 +47,11 @@ impl AuthService {
         }
     }
 
-    pub fn with_defaults(store: Arc<dyn SettingsStore + Send + Sync>) -> Self {
+    pub fn with_defaults(store: Box<dyn SettingsStore>) -> Self {
         Self::new(
             store,
-            Arc::new(StdinCredentialsProvider),
-            Arc::new(DefaultClientFactory),
+            Box::new(StdinCredentialsProvider),
+            Box::new(DefaultClientFactory),
         )
     }
 
@@ -122,20 +134,5 @@ impl AuthService {
                 }
             }
         }
-    }
-}
-
-pub struct StdinCredentialsProvider;
-impl CredentialsProvider for StdinCredentialsProvider {
-    fn read_password(&self, prompt: &str) -> Result<String> {
-        println!("{prompt}");
-        Ok(rpassword::read_password()?)
-    }
-}
-
-pub struct DefaultClientFactory;
-impl ClientFactory for DefaultClientFactory {
-    fn new_client(&self) -> BoursoWebClient {
-        bourso_api::get_client()
     }
 }

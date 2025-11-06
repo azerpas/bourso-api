@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
-use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::cli::{OrderArgs, OrderNewArgs, OrderSubcommands};
 use crate::services::AuthService;
 use crate::settings::FileSettingsStore;
+
 use bourso_api::account::AccountKind;
 use bourso_api::client::trade::order::OrderSide;
 
@@ -23,7 +23,7 @@ pub async fn handle(args: OrderArgs) -> Result<()> {
 }
 
 async fn new_order(args: OrderNewArgs) -> Result<()> {
-    let store = Arc::new(FileSettingsStore::new()?);
+    let store = Box::new(FileSettingsStore::new()?);
     let auth = AuthService::with_defaults(store);
 
     let Some(client) = auth.login().await? else {

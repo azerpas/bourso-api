@@ -1,15 +1,15 @@
 use anyhow::{Context, Result};
 use futures_util::{pin_mut, StreamExt};
-use std::sync::Arc;
 use tracing::info;
 
 use crate::cli::TransferArgs;
 use crate::services::AuthService;
 use crate::settings::FileSettingsStore;
+
 use bourso_api::client::transfer::TransferProgress;
 
 pub async fn handle(args: TransferArgs) -> Result<()> {
-    let settings_store = Arc::new(FileSettingsStore::new()?);
+    let settings_store = Box::new(FileSettingsStore::new()?);
     let auth_service = AuthService::with_defaults(settings_store);
 
     let Some(client) = auth_service.login().await? else {

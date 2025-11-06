@@ -1,14 +1,14 @@
 use anyhow::Result;
-use std::sync::Arc;
 use tracing::info;
 
 use crate::cli::AccountsArgs;
 use crate::services::AuthService;
 use crate::settings::FileSettingsStore;
+
 use bourso_api::account::{Account, AccountKind};
 
 pub async fn handle(args: AccountsArgs) -> Result<()> {
-    let settings_store = Arc::new(FileSettingsStore::new()?);
+    let settings_store = Box::new(FileSettingsStore::new()?);
     let auth_service = AuthService::with_defaults(settings_store);
 
     let Some(client) = auth_service.login().await? else {
