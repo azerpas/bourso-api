@@ -1,6 +1,6 @@
 mod consts;
 mod logging;
-mod settings;
+mod store;
 
 pub use logging::init_logger;
-pub use settings::{FileSettingsStore, Settings, SettingsStore};
+pub use store::{FileSettingsStore, Settings, SettingsStore};

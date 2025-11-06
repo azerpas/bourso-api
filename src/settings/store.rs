@@ -67,7 +67,7 @@ impl SettingsStore for FileSettingsStore {
                 self.directory.display()
             )
         })?;
-        fs::write(&self.path(), to_string_pretty(settings)?)
+        fs::write(self.path(), to_string_pretty(settings)?)
             .with_context(|| format!("Failed to persist settings file: {}", self.path().display()))
     }
 }
