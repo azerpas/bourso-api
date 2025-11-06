@@ -5,6 +5,10 @@ pub mod commands;
 pub mod services;
 pub mod settings;
 
+pub use services::AuthService;
+pub use settings::init_logger;
+pub use settings::{FileSettingsStore, Settings, SettingsStore};
+
 pub async fn run(cli: cli::Cli) -> Result<()> {
     use cli::Commands::*;
     match cli.command {

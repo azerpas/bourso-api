@@ -1,12 +1,13 @@
 use anyhow::Result;
 use clap::Parser;
 
-use bourso_cli::settings::init_logger;
+use bourso_cli::cli::Cli;
+use bourso_cli::{init_logger, run};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger()?;
-    let cli = bourso_cli::cli::Cli::parse();
-    bourso_cli::run(cli).await?;
+    let cli = Cli::parse();
+    run(cli).await?;
     Ok(())
 }
