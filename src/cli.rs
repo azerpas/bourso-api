@@ -2,7 +2,7 @@ use bourso_api::client::trade::order::OrderSide;
 use clap::{value_parser, Args, Parser, Subcommand};
 
 // TODO: add debug option
-// TODO: add type to fix primitive obsession (AccountId w/ FromStr impl) and value_parser
+// TODO: add type to fix primitive obsession and value_parser (AccountId, QuoteInterval, QuoteLength, ...)
 
 #[derive(Parser)]
 #[command(version, author, about, long_about = None)]
@@ -35,9 +35,9 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct ConfigArgs {
-    /// Your customer ID
+    /// Your client number
     #[arg(short, long, value_name = "ID")]
-    pub username: String,
+    pub client_number: String,
 }
 
 #[derive(Args)]
@@ -124,13 +124,13 @@ pub struct QuoteArgs {
     #[arg(
         long,
         default_value = "30",
-        value_parser = ["1","5","30","90","180","365","1825","3650"]
+        value_parser = value_parser!(i64).range(1..=3650)
     )]
-    pub length: String,
+    pub length: i64,
 
     /// Interval of the stock (use "0" for default)
-    #[arg(long, default_value = "0", value_parser = ["0"])]
-    pub interval: String,
+    #[arg(long, default_value = "0", value_parser = value_parser!(i64).range(0..))]
+    pub interval: i64,
 
     #[command(subcommand)]
     pub view: Option<QuoteView>,
