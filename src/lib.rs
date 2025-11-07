@@ -4,10 +4,12 @@ pub mod cli;
 pub mod commands;
 pub mod services;
 pub mod settings;
+pub mod ux;
 
 pub use services::AuthService;
 pub use settings::init_logger;
 pub use settings::{FileSettingsStore, Settings, SettingsStore};
+pub use ux::TextProgressBar;
 
 pub async fn run(cli: cli::Cli) -> Result<()> {
     use cli::Commands::*;

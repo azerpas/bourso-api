@@ -5,6 +5,7 @@ use tracing::info;
 use crate::cli::TransferArgs;
 use crate::services::AuthService;
 use crate::settings::FileSettingsStore;
+use crate::ux::progress::TextProgressBar;
 
 use bourso_api::client::transfer::TransferProgress;
 
@@ -33,29 +34,16 @@ pub async fn handle(args: TransferArgs) -> Result<()> {
 
     let stream = client.transfer_funds(amount, from_account.clone(), to_account.clone(), reason);
 
+    let bar = TextProgressBar::new(30usize);
     pin_mut!(stream);
     while let Some(progress_result) = stream.next().await {
         let progress = progress_result?;
-        let step = progress.step_number();
-        let total = TransferProgress::total_steps();
-        let percentage = (step as f32 / total as f32 * 100.0) as u8;
+        let step = progress.step_number() as usize;
+        let total = TransferProgress::total_steps() as usize;
 
-        let bar_length = 30usize;
-        let filled = (bar_length as f32 * step as f32 / total as f32) as usize;
-        let bar: String = "█".repeat(filled) + &"░".repeat(bar_length - filled);
-
-        print!(
-            "\x1B[2K\r[{}] {:3}% - {}/{} - {}",
-            bar,
-            percentage,
-            step,
-            total,
-            progress.description()
-        );
-        use std::io::Write;
-        std::io::stdout().flush().unwrap();
+        bar.render(step, total, progress.description());
     }
-    println!();
+    bar.finish();
 
     info!(
         "Transfer of {} from account {} to account {} successful ✅",
