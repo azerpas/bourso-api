@@ -10,13 +10,13 @@ repository  = "https://github.com/azerpas/bourso-api"
 
 [dependencies]
 bourso_api         = { path = "./src/bourso_api" }
-tokio              = { version = "1.33.0", features = ["full"] }
-anyhow             = { version = "1.0.75" }
+tokio              = { version = "1.48.0", features = ["full"] }
+anyhow             = { version = "1.0.100" }
 clap               = { version = "4.5.51", features = ["derive"] }
-rpassword          = { version = "7.2.0" }
-directories        = { version = "5.0.1" }
+rpassword          = { version = "7.4.0" }
+directories        = { version = "6.0.0" }
 serde              = { version = "1.0.189", features = ["derive"] }
-serde_json         = { version = "1.0.107" }
+serde_json         = { version = "1.0.145" }
 tracing            = { version = "0.1.41" }
 tracing-appender   = { version = "0.2.3" }
 tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter", "json"] }
