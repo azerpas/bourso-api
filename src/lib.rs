@@ -12,8 +12,8 @@ use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
 use tracing::{debug, info, warn};
 
+pub mod cli;
 pub mod settings;
-pub mod validate;
 
 use settings::{get_settings, save_settings, Settings};
 
@@ -211,13 +211,13 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
     match matches.subcommand() {
         Some(("accounts", sub_matches)) => {
-            if sub_matches.contains_id("bank") {
+            if sub_matches.get_flag("banking") {
                 accounts = web_client.get_accounts(Some(AccountKind::Banking)).await?;
-            } else if sub_matches.contains_id("saving") {
+            } else if sub_matches.get_flag("saving") {
                 accounts = web_client.get_accounts(Some(AccountKind::Savings)).await?;
-            } else if sub_matches.contains_id("trading") {
+            } else if sub_matches.get_flag("trading") {
                 accounts = web_client.get_accounts(Some(AccountKind::Trading)).await?;
-            } else if sub_matches.contains_id("loans") {
+            } else if sub_matches.get_flag("loans") {
                 accounts = web_client.get_accounts(Some(AccountKind::Loans)).await?;
             } else {
                 accounts = web_client.get_accounts(None).await?;
@@ -267,7 +267,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
             accounts = web_client.get_accounts(None).await?;
 
             let from_account_id = transfer_matches
-                .get_one::<String>("account")
+                .get_one::<String>("from_account")
                 .map(|s| s.as_str())
                 .unwrap();
             let to_account_id = transfer_matches
