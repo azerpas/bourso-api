@@ -105,3 +105,25 @@ impl AsRef<str> for SymbolId {
         &self.0
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OrderQuantity(u64);
+impl OrderQuantity {
+    pub fn new(v: u64) -> Result<Self, ValueError> {
+        if v >= 1 {
+            Ok(Self(v))
+        } else {
+            Err(ValueError::OrderQuantity)
+        }
+    }
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+impl FromStr for OrderQuantity {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v: u64 = s.parse().map_err(|_| ValueError::OrderQuantity)?;
+        Self::new(v)
+    }
+}
