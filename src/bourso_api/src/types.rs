@@ -12,15 +12,15 @@ pub enum ValueError {
     OrderQuantity,
     #[error("invalid money amount: must be a positive, up to 2 decimal places float")]
     MoneyAmount,
-    #[error("invalid transfer reason: must be up to 50 letters only (a-z, A-Z)")]
+    #[error("invalid transfer reason: must be 0-50 letters only (a-z, A-Z)")]
     TransferReason,
-    #[error("invalid quote length: must be one of the following values: 1, 5, 30, 90, 180, 365, 1825, 3650")]
+    #[error("invalid quote length: must be one of: 1, 5, 30, 90, 180, 365, 1825, 3650")]
     QuoteLength,
     #[error("invalid quote period: must be a positive integer")]
     QuotePeriod,
     #[error("invalid mfa code: must be 6-12 digits (0-9)")]
     MfaCode,
-    #[error("invalid password: must be non-empty string")]
+    #[error("invalid password: must be a non-empty string")]
     Password,
 }
 
@@ -29,7 +29,7 @@ pub struct ClientNumber(String);
 impl ClientNumber {
     pub fn new(s: &str) -> Result<Self, ValueError> {
         let t = s.trim();
-        if t.len() == 8 && t.chars().all(|c| c.is_ascii_digit) {
+        if t.len() == 8 && t.chars().all(|c| c.is_ascii_digit()) {
             Ok(Self(t.into()))
         } else {
             Err(ValueError::ClientNumber)
