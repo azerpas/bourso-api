@@ -127,3 +127,25 @@ impl FromStr for OrderQuantity {
         Self::new(v)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MoneyAmount(f64);
+impl MoneyAmount {
+    pub fn new(v: f64) -> Result<Self, ValueError> {
+        if v > 0.0 && v.fract().abs() <= 0.02 {
+            Ok(Self(v))
+        } else {
+            Err(ValueError::MoneyAmount)
+        }
+    }
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
+impl FromStr for MoneyAmount {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v: f64 = s.parse().map_err(|_| ValueError::MoneyAmount)?;
+        Self::new(v)
+    }
+}
