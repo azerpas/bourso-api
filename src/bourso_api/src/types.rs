@@ -51,3 +51,30 @@ impl AsRef<str> for ClientNumber {
         &self.0
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AccountId(String);
+impl AccountId {
+    pub fn new(s: &str) -> Result<Self, ValueError> {
+        let t = s.trim();
+        if t.len() == 32 && t.chars().all(|c| c.is_ascii_hexdigit()) {
+            Ok(Self(t.into()))
+        } else {
+            Err(ValueError::AccountId)
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl FromStr for AccountId {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+impl AsRef<str> for AccountId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
