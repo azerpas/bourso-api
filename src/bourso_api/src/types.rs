@@ -1,6 +1,7 @@
 use std::str::FromStr;
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ValueError {
     #[error("invalid client number: must be 8 digits (0-9)")]
     ClientNumber,
