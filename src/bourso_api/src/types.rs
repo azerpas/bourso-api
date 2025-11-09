@@ -78,3 +78,30 @@ impl AsRef<str> for AccountId {
         &self.0
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SymbolId(String);
+impl SymbolId {
+    pub fn new(s: &str) -> Result<Self, ValueError> {
+        let t = s.trim();
+        if (6..=12).contains(&t.len()) && t.chars().all(|c| c.is_ascii_alphanumeric()) {
+            Ok(Self(t.into()))
+        } else {
+            Err(ValueError::SymbolId)
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl FromStr for SymbolId {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+impl AsRef<str> for SymbolId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
