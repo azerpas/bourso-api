@@ -149,3 +149,32 @@ impl FromStr for MoneyAmount {
         Self::new(v)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TransferReason(String);
+impl TransferReason {
+    pub fn new(s: &str) -> Result<Self, ValueError> {
+        let t = s.trim();
+        if t.len() > 50 {
+            return Err(ValueError::TransferReason);
+        }
+        if !t.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Err(ValueError::TransferReason);
+        }
+        Ok(Self(t.into()))
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl FromStr for TransferReason {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+impl AsRef<str> for TransferReason {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
