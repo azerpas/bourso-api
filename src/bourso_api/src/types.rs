@@ -243,3 +243,30 @@ impl FromStr for QuotePeriod {
         Self::new(v)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MfaCode(String);
+impl MfaCode {
+    pub fn new(s: &str) -> Result<Self, ValueError> {
+        let t = s.trim();
+        if (6..=12).contains(&t.len()) && t.chars().all(|c| c.is_ascii_digit()) {
+            Ok(Self(t.into()))
+        } else {
+            Err(ValueError::MfaCode)
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl FromStr for MfaCode {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+impl AsRef<str> for MfaCode {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
