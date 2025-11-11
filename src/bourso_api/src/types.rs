@@ -270,3 +270,30 @@ impl AsRef<str> for MfaCode {
         &self.0
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Password(String);
+impl Password {
+    pub fn new(s: &str) -> Result<Self, ValueError> {
+        let t = s.trim();
+        if !t.is_empty() {
+            Ok(Self(t.into()))
+        } else {
+            Err(ValueError::Password)
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl FromStr for Password {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+impl AsRef<str> for Password {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
