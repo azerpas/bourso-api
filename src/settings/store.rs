@@ -71,3 +71,30 @@ impl SettingsStore for FileSettingsStore {
             .with_context(|| format!("Failed to persist settings file: {}", self.path().display()))
     }
 }
+
+pub struct JsonFileSettingsStore {
+    path: PathBuf,
+}
+
+impl JsonFileSettingsStore {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    fn path(&self) -> PathBuf {
+        self.path.clone()
+    }
+}
+
+impl SettingsStore for JsonFileSettingsStore {
+    fn load(&self) -> Result<Settings> {
+        let content = fs::read_to_string(&self.path)
+            .with_context(|| format!("Failed to read settings file: {}", self.path.display()))?;
+        from_str(&content).context("Failed to deserialize settings")
+    }
+
+    fn save(&self, settings: &Settings) -> Result<()> {
+        fs::write(self.path(), to_string_pretty(settings)?)
+            .with_context(|| format!("Failed to persist settings file: {}", self.path().display()))
+    }
+}
