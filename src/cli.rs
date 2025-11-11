@@ -1,5 +1,7 @@
-use bourso_api::client::trade::order::OrderSide;
 use clap::{value_parser, Args, Parser, Subcommand};
+use std::path::PathBuf;
+
+use bourso_api::client::trade::order::OrderSide;
 
 // TODO: add debug option
 // TODO: add type to fix primitive obsession and value_parser (AccountId, QuoteInterval, QuoteLength, ...)
@@ -8,8 +10,8 @@ use clap::{value_parser, Args, Parser, Subcommand};
 #[command(version, author, about, long_about = None)]
 pub struct Cli {
     /// Optional path to credentials JSON file
-    #[arg(short, long, value_name = "FILE")]
-    pub credentials: Option<String>,
+    #[arg(short, long, value_name = "FILE", value_parser = value_parser!(PathBuf))]
+    pub credentials: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Commands,
