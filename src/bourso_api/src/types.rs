@@ -283,6 +283,17 @@ impl AsRef<str> for MfaCode {
         &self.0
     }
 }
+impl TryFrom<String> for MfaCode {
+    type Error = ValueError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
+    }
+}
+impl From<MfaCode> for String {
+    fn from(value: MfaCode) -> Self {
+        value.0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
