@@ -220,3 +220,26 @@ impl FromStr for QuoteLength {
         }
     }
 }
+
+// TODO: add support for other periods
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct QuotePeriod(i64);
+impl QuotePeriod {
+    pub fn new(v: i64) -> Result<Self, ValueError> {
+        if v != 0 {
+            Ok(Self(v))
+        } else {
+            Err(ValueError::QuotePeriod)
+        }
+    }
+    pub fn value(self) -> i64 {
+        self.0
+    }
+}
+impl FromStr for QuotePeriod {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v: i64 = s.trim().parse().map_err(|_| ValueError::QuotePeriod)?;
+        Self::new(v)
+    }
+}
