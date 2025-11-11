@@ -239,7 +239,7 @@ impl FromStr for QuoteLength {
 pub struct QuotePeriod(i64);
 impl QuotePeriod {
     pub fn new(v: i64) -> Result<Self, ValueError> {
-        if v != 0 {
+        if v == 0 {
             Ok(Self(v))
         } else {
             Err(ValueError::QuotePeriod)
