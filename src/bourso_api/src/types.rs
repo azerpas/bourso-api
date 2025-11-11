@@ -178,3 +178,45 @@ impl AsRef<str> for TransferReason {
         &self.0
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QuoteLength {
+    D1,
+    D5,
+    D30,
+    D90,
+    D180,
+    D365,
+    D1825,
+    D3650,
+}
+impl QuoteLength {
+    pub fn days(self) -> i64 {
+        match self {
+            QuoteLength::D1 => 1,
+            QuoteLength::D5 => 5,
+            QuoteLength::D30 => 30,
+            QuoteLength::D90 => 90,
+            QuoteLength::D180 => 180,
+            QuoteLength::D365 => 365,
+            QuoteLength::D1825 => 1825,
+            QuoteLength::D3650 => 3650,
+        }
+    }
+}
+impl FromStr for QuoteLength {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().parse::<i64>() {
+            Ok(1) => Ok(QuoteLength::D1),
+            Ok(5) => Ok(QuoteLength::D5),
+            Ok(30) => Ok(QuoteLength::D30),
+            Ok(90) => Ok(QuoteLength::D90),
+            Ok(180) => Ok(QuoteLength::D180),
+            Ok(365) => Ok(QuoteLength::D365),
+            Ok(1825) => Ok(QuoteLength::D1825),
+            Ok(3650) => Ok(QuoteLength::D3650),
+            _ => Err(ValueError::QuoteLength),
+        }
+    }
+}
