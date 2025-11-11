@@ -1,7 +1,13 @@
 use clap::{value_parser, Args, Parser, Subcommand};
 use std::path::PathBuf;
 
-use bourso_api::client::trade::order::OrderSide;
+use bourso_api::{
+    client::trade::order::OrderSide,
+    types::{
+        AccountId, ClientNumber, MoneyAmount, OrderQuantity, QuoteLength, QuotePeriod, SymbolId,
+        TransferReason,
+    },
+};
 
 // TODO: add debug option
 // TODO: add type to fix primitive obsession and value_parser (AccountId, QuoteInterval, QuoteLength, ...)
@@ -38,8 +44,8 @@ pub enum Commands {
 #[derive(Args)]
 pub struct ConfigArgs {
     /// Your client number
-    #[arg(short, long, value_name = "ID")]
-    pub client_number: String,
+    #[arg(short, long, value_name = "ID", value_parser = value_parser!(ClientNumber))]
+    pub client_number: ClientNumber,
 }
 
 #[derive(Args)]
@@ -97,20 +103,20 @@ pub struct OrderListArgs {}
 #[derive(Args)]
 pub struct OrderNewArgs {
     /// Account to use by its ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(short, long, value_name = "ID", value_parser = parse_account_id)]
-    pub account: String,
+    #[arg(short, long, value_name = "ID", value_parser = value_parser!(AccountId))]
+    pub account: AccountId,
 
     /// Side of the order (buy/sell)
-    #[arg(long, value_parser = clap::value_parser!(OrderSide))]
+    #[arg(long, value_parser = value_parser!(OrderSide))]
     pub side: OrderSide,
 
     /// Symbol ID of the order (e.g: "1rTCW8")
-    #[arg(long, value_name = "ID")]
-    pub symbol: String,
+    #[arg(long, value_name = "ID", value_parser = value_parser!(SymbolId))]
+    pub symbol: SymbolId,
 
     /// Quantity of the order (e.g: 1)
-    #[arg(short, long, value_parser = value_parser!(u64).range(1..))]
-    pub quantity: u64,
+    #[arg(short, long, value_parser = value_parser!(OrderQuantity))]
+    pub quantity: OrderQuantity,
 }
 
 #[derive(Args)]
@@ -119,20 +125,20 @@ pub struct OrderCancelArgs {}
 #[derive(Args)]
 pub struct QuoteArgs {
     /// Symbol ID of the stock (e.g: "1rTCW8")
-    #[arg(long, value_name = "ID")]
-    pub symbol: String,
+    #[arg(long, value_name = "ID", value_parser = value_parser!(SymbolId))]
+    pub symbol: SymbolId,
 
     /// Length period of the stock (1, 5, 30, 90, 180, 365, 1825, 3650)
     #[arg(
         long,
         default_value = "30",
-        value_parser = value_parser!(i64).range(1..=3650)
+        value_parser = value_parser!(QuoteLength)
     )]
-    pub length: i64,
+    pub length: QuoteLength,
 
-    /// Interval of the stock (use "0" for default)
-    #[arg(long, default_value = "0", value_parser = value_parser!(i64).range(0..))]
-    pub interval: i64,
+    /// Period of the stock (use "0" for default)
+    #[arg(long, default_value = "0", value_parser = value_parser!(QuotePeriod))]
+    pub period: QuotePeriod,
 
     #[command(subcommand)]
     pub view: Option<QuoteView>,
@@ -159,27 +165,18 @@ pub enum QuoteView {
 #[derive(Args)]
 pub struct TransferArgs {
     /// Source account ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(long = "from", value_name = "ID", value_parser = parse_account_id)]
-    pub from_account: String,
+    #[arg(long = "from", value_name = "ID", value_parser = value_parser!(AccountId))]
+    pub from_account: AccountId,
 
     /// Destination account ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(long = "to", value_name = "ID", value_parser = parse_account_id)]
-    pub to_account: String,
+    #[arg(long = "to", value_name = "ID", value_parser = value_parser!(AccountId))]
+    pub to_account: AccountId,
 
     /// Amount to transfer
-    #[arg(long)]
-    pub amount: String,
+    #[arg(long, value_parser = value_parser!(MoneyAmount))]
+    pub amount: MoneyAmount,
 
     /// Reason for the transfer (max 50 chars)
-    #[arg(long)]
-    pub reason: Option<String>,
-}
-
-fn parse_account_id(s: &str) -> Result<String, String> {
-    let t = s.trim();
-    if t.len() == 32 && t.chars().all(|c| c.is_ascii_hexdigit()) {
-        Ok(t.to_owned())
-    } else {
-        Err("Account ID must be 32 hex characters (0-9, a-f)".into())
-    }
+    #[arg(long, value_parser = value_parser!(TransferReason))]
+    pub reason: Option<TransferReason>,
 }
