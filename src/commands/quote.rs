@@ -8,7 +8,11 @@ pub async fn handle(args: QuoteArgs) -> Result<()> {
 
     let client = bourso_api::get_client();
     let quotes = client
-        .get_ticks(&args.symbol, args.length, args.interval)
+        .get_ticks(
+            args.symbol.as_str(),
+            args.length.days(),
+            args.period.value(),
+        )
         .await?;
 
     match args.view {

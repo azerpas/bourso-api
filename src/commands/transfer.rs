@@ -13,22 +13,24 @@ pub async fn handle(args: TransferArgs, ctx: &AppCtx) -> Result<()> {
         return Ok(());
     };
 
-    let from_account_id = args.from_account;
-    let to_account_id = args.to_account;
-    let amount: f64 = args.amount.parse()?;
-    let reason = args.reason;
-
     let accounts = client.get_accounts(None).await?;
+
     let from_account = accounts
         .iter()
-        .find(|a| a.id == from_account_id)
+        .find(|a| a.id == args.from_account.as_str()) // TODO: compare AccountId instead of String
         .context("From account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+
     let to_account = accounts
         .iter()
-        .find(|a| a.id == to_account_id)
+        .find(|a| a.id == args.to_account.as_str()) // TODO: compare AccountId instead of String
         .context("To account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
 
-    let stream = client.transfer_funds(amount, from_account.clone(), to_account.clone(), reason);
+    let stream = client.transfer_funds(
+        args.amount.get(),
+        from_account.clone(),
+        to_account.clone(),
+        args.reason.map(|r| r.as_str().to_string()),
+    );
 
     let bar = TextProgressBar::new(30usize);
     pin_mut!(stream);
@@ -43,7 +45,9 @@ pub async fn handle(args: TransferArgs, ctx: &AppCtx) -> Result<()> {
 
     info!(
         "Transfer of {} from account {} to account {} successful ✅",
-        amount, from_account.id, to_account.id
+        args.amount.get(),
+        from_account.id,
+        to_account.id
     );
 
     Ok(())
