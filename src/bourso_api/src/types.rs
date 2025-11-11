@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -25,7 +26,8 @@ pub enum ValueError {
     Password,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct ClientNumber(String);
 impl ClientNumber {
     pub fn new(s: &str) -> Result<Self, ValueError> {
@@ -49,6 +51,17 @@ impl FromStr for ClientNumber {
 impl AsRef<str> for ClientNumber {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+impl TryFrom<String> for ClientNumber {
+    type Error = ValueError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
+    }
+}
+impl From<ClientNumber> for String {
+    fn from(value: ClientNumber) -> Self {
+        value.0
     }
 }
 
@@ -271,7 +284,8 @@ impl AsRef<str> for MfaCode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct Password(String);
 impl Password {
     pub fn new(s: &str) -> Result<Self, ValueError> {
@@ -295,5 +309,16 @@ impl FromStr for Password {
 impl AsRef<str> for Password {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+impl TryFrom<String> for Password {
+    type Error = ValueError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
+    }
+}
+impl From<Password> for String {
+    fn from(value: Password) -> Self {
+        value.0
     }
 }

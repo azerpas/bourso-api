@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use bourso_api::types::{ClientNumber, Password};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
@@ -9,9 +10,9 @@ use crate::settings::consts::{APP_NAME, APP_ORGANIZATION, APP_QUALIFIER, SETTING
 #[derive(Serialize, Deserialize, Default)]
 pub struct Settings {
     #[serde(rename = "clientNumber")]
-    pub client_number: Option<String>,
+    pub client_number: Option<ClientNumber>,
     #[serde(rename = "password")]
-    pub password: Option<String>,
+    pub password: Option<Password>,
 }
 
 pub trait SettingsStore {
