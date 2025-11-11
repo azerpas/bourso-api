@@ -18,7 +18,7 @@ pub enum ValueError {
     TransferReason,
     #[error("invalid quote length: must be one of: 1, 5, 30, 90, 180, 365, 1825, 3650")]
     QuoteLength,
-    #[error("invalid quote period: must be a positive integer")]
+    #[error("invalid quote period: must be 0")]
     QuotePeriod,
     #[error("invalid mfa code: must be 6-12 digits (0-9)")]
     MfaCode,
