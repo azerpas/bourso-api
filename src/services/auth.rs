@@ -28,15 +28,15 @@ impl ClientFactory for DefaultClientFactory {
     }
 }
 
-pub struct AuthService {
-    settings_store: Box<dyn SettingsStore>,
+pub struct AuthService<'a> {
+    settings_store: &'a dyn SettingsStore,
     credentials_provider: Box<dyn CredentialsProvider>,
     client_factory: Box<dyn ClientFactory>,
 }
 
-impl AuthService {
+impl<'a> AuthService<'a> {
     pub fn new(
-        settings_store: Box<dyn SettingsStore>,
+        settings_store: &'a dyn SettingsStore,
         credentials_provider: Box<dyn CredentialsProvider>,
         client_factory: Box<dyn ClientFactory>,
     ) -> Self {
@@ -47,9 +47,9 @@ impl AuthService {
         }
     }
 
-    pub fn with_defaults(store: Box<dyn SettingsStore>) -> Self {
+    pub fn with_defaults(settings_store: &'a dyn SettingsStore) -> Self {
         Self::new(
-            store,
+            settings_store,
             Box::new(StdinCredentialsProvider),
             Box::new(DefaultClientFactory),
         )
