@@ -1,15 +1,12 @@
 use anyhow::Result;
 use tracing::info;
 
-use crate::cli::AccountsArgs;
-use crate::services::AuthService;
-use crate::settings::FileSettingsStore;
+use crate::{cli::AccountsArgs, services::AuthService, AppCtx};
 
 use bourso_api::account::{Account, AccountKind};
 
-pub async fn handle(args: AccountsArgs) -> Result<()> {
-    let settings_store = Box::new(FileSettingsStore::new()?);
-    let auth_service = AuthService::with_defaults(settings_store);
+pub async fn handle(args: AccountsArgs, ctx: &AppCtx) -> Result<()> {
+    let auth_service = AuthService::with_defaults(&*ctx.settings_store);
 
     let Some(client) = auth_service.login().await? else {
         return Ok(());

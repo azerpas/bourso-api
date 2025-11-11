@@ -1,16 +1,18 @@
 use anyhow::{Context, Result};
 use tracing::{info, warn};
 
-use crate::cli::{OrderArgs, OrderNewArgs, OrderSubcommands};
-use crate::services::AuthService;
-use crate::settings::FileSettingsStore;
+use crate::{
+    cli::{OrderArgs, OrderNewArgs, OrderSubcommands},
+    services::AuthService,
+    AppCtx,
+};
 
 use bourso_api::account::AccountKind;
 use bourso_api::client::trade::order::OrderSide;
 
-pub async fn handle(args: OrderArgs) -> Result<()> {
+pub async fn handle(args: OrderArgs, ctx: &AppCtx) -> Result<()> {
     match args.command {
-        OrderSubcommands::New(n) => new_order(n).await,
+        OrderSubcommands::New(n) => new_order(n, ctx).await,
         OrderSubcommands::List(_) => {
             warn!("Listing orders is coming soon.");
             Ok(())
@@ -22,9 +24,8 @@ pub async fn handle(args: OrderArgs) -> Result<()> {
     }
 }
 
-async fn new_order(args: OrderNewArgs) -> Result<()> {
-    let store = Box::new(FileSettingsStore::new()?);
-    let auth = AuthService::with_defaults(store);
+async fn new_order(args: OrderNewArgs, ctx: &AppCtx) -> Result<()> {
+    let auth = AuthService::with_defaults(&*ctx.settings_store);
 
     let Some(client) = auth.login().await? else {
         return Ok(());
