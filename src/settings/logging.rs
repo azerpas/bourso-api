@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use directories::ProjectDirs;
 use std::{
-    fs,
+    fs::create_dir_all,
     io::{stderr, IsTerminal},
 };
 use tracing_appender::rolling;
@@ -21,7 +21,7 @@ pub fn init_logger() -> Result<()> {
         .ok_or_else(|| anyhow!("Could not determine project directories"))?;
 
     let directory = project_dirs.data_dir();
-    fs::create_dir_all(directory)?;
+    create_dir_all(directory)?;
 
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG_LEVEL));
