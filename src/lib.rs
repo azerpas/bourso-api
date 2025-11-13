@@ -7,8 +7,7 @@ pub mod settings;
 pub mod ux;
 
 pub use services::AuthService;
-pub use settings::init_logger;
-pub use settings::{FsSettingsStore, Settings, SettingsStore};
+pub use settings::{init_logger, FsSettingsStore, Settings, SettingsStore};
 pub use ux::TextProgressBar;
 
 pub struct AppCtx {
@@ -27,12 +26,11 @@ pub async fn run(cli: cli::Cli) -> Result<()> {
     };
     let ctx = AppCtx { settings_store };
 
-    use cli::Commands::*; // TODO: do I need it ?
     match command {
-        Config(args) => commands::config::handle(args, &ctx).await,
-        Accounts(args) => commands::accounts::handle(args, &ctx).await,
-        Trade(args) => commands::trade::handle(args, &ctx).await,
-        Quote(args) => commands::quote::handle(args).await,
-        Transfer(args) => commands::transfer::handle(args, &ctx).await,
+        cli::Commands::Config(args) => commands::config::handle(args, &ctx).await,
+        cli::Commands::Accounts(args) => commands::accounts::handle(args, &ctx).await,
+        cli::Commands::Trade(args) => commands::trade::handle(args, &ctx).await,
+        cli::Commands::Quote(args) => commands::quote::handle(args).await,
+        cli::Commands::Transfer(args) => commands::transfer::handle(args, &ctx).await,
     }
 }
