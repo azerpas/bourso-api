@@ -8,7 +8,7 @@ pub mod ux;
 
 pub use services::AuthService;
 pub use settings::init_logger;
-pub use settings::{FileSettingsStore, JsonFileSettingsStore, Settings, SettingsStore};
+pub use settings::{FsSettingsStore, Settings, SettingsStore};
 pub use ux::TextProgressBar;
 
 pub struct AppCtx {
@@ -16,14 +16,19 @@ pub struct AppCtx {
 }
 
 pub async fn run(cli: cli::Cli) -> Result<()> {
-    let settings_store: Box<dyn SettingsStore> = match cli.credentials.clone() {
-        Some(path) => Box::new(JsonFileSettingsStore::new(path)),
-        None => Box::new(FileSettingsStore::new()?),
+    let cli::Cli {
+        credentials,
+        command,
+    } = cli;
+
+    let settings_store: Box<dyn SettingsStore> = match credentials {
+        Some(path) => Box::new(FsSettingsStore::from_path(path)),
+        None => Box::new(FsSettingsStore::from_default_config_dir()?),
     };
     let ctx = AppCtx { settings_store };
 
-    use cli::Commands::*;
-    match cli.command {
+    use cli::Commands::*; // TODO: do I need it ?
+    match command {
         Config(args) => commands::config::handle(args, &ctx).await,
         Accounts(args) => commands::accounts::handle(args, &ctx).await,
         Trade(args) => commands::trade::handle(args, &ctx).await,

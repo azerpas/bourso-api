@@ -3,7 +3,11 @@ use bourso_api::types::{ClientNumber, Password};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
-use std::{fs, path::PathBuf};
+use std::{
+    fs::{create_dir_all, read_to_string, write},
+    io::ErrorKind,
+    path::PathBuf,
+};
 
 use crate::settings::consts::{APP_NAME, APP_ORGANIZATION, APP_QUALIFIER, SETTINGS_FILE};
 
@@ -20,82 +24,60 @@ pub trait SettingsStore {
     fn save(&self, settings: &Settings) -> Result<()>;
 }
 
-pub struct FileSettingsStore {
-    directory: PathBuf, // platform config directory (from ProjectDirs)
-    file: &'static str, // "settings.json"
+pub struct FsSettingsStore {
+    path: PathBuf,
+    create_if_missing: bool,
 }
 
-impl FileSettingsStore {
-    pub fn new() -> Result<Self> {
+impl FsSettingsStore {
+    /// Default location (XDG / platform config dir + SETTINGS_FILE)
+    pub fn from_default_config_dir() -> Result<Self> {
         let project_dirs = ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_NAME)
             .ok_or_else(|| anyhow!("Could not determine project directories"))?;
 
         Ok(Self {
-            directory: project_dirs.config_dir().to_path_buf(),
-            file: SETTINGS_FILE,
+            path: project_dirs.config_dir().join(SETTINGS_FILE),
+            create_if_missing: true,
         })
     }
 
-    fn path(&self) -> PathBuf {
-        self.directory.join(self.file)
+    /// Arbitrary path (e.g. provided via CLI)
+    pub fn from_path(path: PathBuf) -> Self {
+        Self {
+            path,
+            create_if_missing: false,
+        }
+    }
+
+    fn ensure_directory(&self) -> Result<()> {
+        if let Some(directory) = self.path.parent() {
+            create_dir_all(directory).context("Failed to create settings directory")?;
+        }
+        Ok(())
     }
 }
 
-impl SettingsStore for FileSettingsStore {
+impl SettingsStore for FsSettingsStore {
     fn load(&self) -> Result<Settings> {
-        fs::create_dir_all(&self.directory).with_context(|| {
-            format!(
-                "Failed to create settings directory: {}",
-                self.directory.display()
-            )
-        })?;
-        let path = self.path();
-        let content = match fs::read_to_string(&path) {
-            Ok(content) => content,
-            Err(_) => {
+        self.ensure_directory()?;
+
+        match read_to_string(&self.path) {
+            Ok(content) => from_str(&content).context("Failed to deserialize settings"),
+
+            Err(e) if self.create_if_missing && e.kind() == ErrorKind::NotFound => {
+                // Only for "default config" mode AND only if the file is missing
                 let defaults = Settings::default();
                 self.save(&defaults)?;
-                return Ok(defaults);
+                Ok(defaults)
             }
-        };
-        from_str(&content).context("Failed to deserialize settings")
+
+            Err(e) => Err(e).context("Failed to read settings file"),
+        }
     }
 
     fn save(&self, settings: &Settings) -> Result<()> {
-        fs::create_dir_all(&self.directory).with_context(|| {
-            format!(
-                "Failed to create settings directory: {}",
-                self.directory.display()
-            )
-        })?;
-        fs::write(self.path(), to_string_pretty(settings)?)
-            .with_context(|| format!("Failed to persist settings file: {}", self.path().display()))
-    }
-}
+        self.ensure_directory()?;
 
-pub struct JsonFileSettingsStore {
-    path: PathBuf,
-}
-
-impl JsonFileSettingsStore {
-    pub fn new(path: PathBuf) -> Self {
-        Self { path }
-    }
-
-    fn path(&self) -> PathBuf {
-        self.path.clone()
-    }
-}
-
-impl SettingsStore for JsonFileSettingsStore {
-    fn load(&self) -> Result<Settings> {
-        let content = fs::read_to_string(&self.path)
-            .with_context(|| format!("Failed to read settings file: {}", self.path.display()))?;
-        from_str(&content).context("Failed to deserialize settings")
-    }
-
-    fn save(&self, settings: &Settings) -> Result<()> {
-        fs::write(self.path(), to_string_pretty(settings)?)
-            .with_context(|| format!("Failed to persist settings file: {}", self.path().display()))
+        write(&self.path, to_string_pretty(settings)?).context("Failed to persist settings file")
     }
 }
