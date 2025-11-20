@@ -1,3 +1,5 @@
+use clap::ValueEnum;
+use derive_more::{AsRef, From, Into};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
@@ -16,8 +18,6 @@ pub enum ValueError {
     MoneyAmount,
     #[error("invalid transfer reason: must be 0-50 letters only (a-z, A-Z)")]
     TransferReason,
-    #[error("invalid quote length: must be one of: 1, 5, 30, 90, 180, 365, 1825, 3650")]
-    QuoteLength,
     #[error("invalid quote period: must be 0")]
     QuotePeriod,
     #[error("invalid mfa code: must be 6-12 digits (0-9)")]
@@ -26,7 +26,7 @@ pub enum ValueError {
     Password,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef, From, Into)]
 #[serde(try_from = "String", into = "String")]
 pub struct ClientNumber(String);
 impl ClientNumber {
@@ -38,9 +38,6 @@ impl ClientNumber {
             Err(ValueError::ClientNumber)
         }
     }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 impl FromStr for ClientNumber {
     type Err = ValueError;
@@ -48,24 +45,8 @@ impl FromStr for ClientNumber {
         Self::new(s)
     }
 }
-impl AsRef<str> for ClientNumber {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-impl TryFrom<String> for ClientNumber {
-    type Error = ValueError;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(&value)
-    }
-}
-impl From<ClientNumber> for String {
-    fn from(value: ClientNumber) -> Self {
-        value.0
-    }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, From, Into)]
 pub struct AccountId(String);
 impl AccountId {
     pub fn new(s: &str) -> Result<Self, ValueError> {
@@ -76,9 +57,6 @@ impl AccountId {
             Err(ValueError::AccountId)
         }
     }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 impl FromStr for AccountId {
     type Err = ValueError;
@@ -86,13 +64,8 @@ impl FromStr for AccountId {
         Self::new(s)
     }
 }
-impl AsRef<str> for AccountId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, From, Into)]
 pub struct SymbolId(String);
 impl SymbolId {
     pub fn new(s: &str) -> Result<Self, ValueError> {
@@ -103,9 +76,6 @@ impl SymbolId {
             Err(ValueError::SymbolId)
         }
     }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 impl FromStr for SymbolId {
     type Err = ValueError;
@@ -113,13 +83,8 @@ impl FromStr for SymbolId {
         Self::new(s)
     }
 }
-impl AsRef<str> for SymbolId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, AsRef, From, Into)]
 pub struct OrderQuantity(u64);
 impl OrderQuantity {
     pub fn new(v: u64) -> Result<Self, ValueError> {
@@ -163,7 +128,7 @@ impl FromStr for MoneyAmount {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, From, Into)]
 pub struct TransferReason(String);
 impl TransferReason {
     pub fn new(s: &str) -> Result<Self, ValueError> {
@@ -176,9 +141,6 @@ impl TransferReason {
         }
         Ok(Self(t.into()))
     }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 impl FromStr for TransferReason {
     type Err = ValueError;
@@ -186,21 +148,24 @@ impl FromStr for TransferReason {
         Self::new(s)
     }
 }
-impl AsRef<str> for TransferReason {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ValueEnum)]
 pub enum QuoteLength {
+    #[value(name = "1")]
     D1,
+    #[value(name = "5")]
     D5,
+    #[value(name = "30")]
     D30,
+    #[value(name = "90")]
     D90,
+    #[value(name = "180")]
     D180,
+    #[value(name = "365")]
     D365,
+    #[value(name = "1825")]
     D1825,
+    #[value(name = "3650")]
     D3650,
 }
 impl QuoteLength {
@@ -214,22 +179,6 @@ impl QuoteLength {
             QuoteLength::D365 => 365,
             QuoteLength::D1825 => 1825,
             QuoteLength::D3650 => 3650,
-        }
-    }
-}
-impl FromStr for QuoteLength {
-    type Err = ValueError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().parse::<i64>() {
-            Ok(1) => Ok(QuoteLength::D1),
-            Ok(5) => Ok(QuoteLength::D5),
-            Ok(30) => Ok(QuoteLength::D30),
-            Ok(90) => Ok(QuoteLength::D90),
-            Ok(180) => Ok(QuoteLength::D180),
-            Ok(365) => Ok(QuoteLength::D365),
-            Ok(1825) => Ok(QuoteLength::D1825),
-            Ok(3650) => Ok(QuoteLength::D3650),
-            _ => Err(ValueError::QuoteLength),
         }
     }
 }
@@ -257,7 +206,7 @@ impl FromStr for QuotePeriod {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, From, Into)]
 pub struct MfaCode(String);
 impl MfaCode {
     pub fn new(s: &str) -> Result<Self, ValueError> {
@@ -268,9 +217,6 @@ impl MfaCode {
             Err(ValueError::MfaCode)
         }
     }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 impl FromStr for MfaCode {
     type Err = ValueError;
@@ -278,24 +224,8 @@ impl FromStr for MfaCode {
         Self::new(s)
     }
 }
-impl AsRef<str> for MfaCode {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-impl TryFrom<String> for MfaCode {
-    type Error = ValueError;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(&value)
-    }
-}
-impl From<MfaCode> for String {
-    fn from(value: MfaCode) -> Self {
-        value.0
-    }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRef, From, Into)]
 #[serde(try_from = "String", into = "String")]
 pub struct Password(String);
 impl Password {
@@ -307,29 +237,10 @@ impl Password {
             Err(ValueError::Password)
         }
     }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 impl FromStr for Password {
     type Err = ValueError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::new(s)
-    }
-}
-impl AsRef<str> for Password {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-impl TryFrom<String> for Password {
-    type Error = ValueError;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(&value)
-    }
-}
-impl From<Password> for String {
-    fn from(value: Password) -> Self {
-        value.0
     }
 }

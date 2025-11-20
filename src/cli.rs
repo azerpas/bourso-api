@@ -128,7 +128,7 @@ pub struct QuoteArgs {
     #[arg(long, value_name = "ID", value_parser = value_parser!(SymbolId))]
     pub symbol: SymbolId,
 
-    /// Length period of the stock (1, 5, 30, 90, 180, 365, 1825, 3650)
+    /// Length period of the stock
     #[arg(
         long,
         default_value = "30",
@@ -136,7 +136,7 @@ pub struct QuoteArgs {
     )]
     pub length: QuoteLength,
 
-    /// Period of the stock (use "0" for default)
+    /// Period of the stock
     #[arg(long, default_value = "0", value_parser = value_parser!(QuotePeriod))]
     pub period: QuotePeriod,
 

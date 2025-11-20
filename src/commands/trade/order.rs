@@ -35,7 +35,7 @@ async fn new_order(args: OrderNewArgs, ctx: &AppCtx) -> Result<()> {
     let accounts = client.get_accounts(Some(AccountKind::Trading)).await?;
     let account = accounts
         .iter()
-        .find(|a| a.id == args.account.as_str())  // TODO: compare AccountId instead of String
+        .find(|a| a.id == args.account.as_ref().as_str())  // TODO: compare AccountId instead of String
         .context("Account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
 
     let side: OrderSide = args.side;
@@ -43,7 +43,7 @@ async fn new_order(args: OrderNewArgs, ctx: &AppCtx) -> Result<()> {
     let symbol = args.symbol;
 
     let _ = client
-        .order(side, account, symbol.as_str(), quantity, None)
+        .order(side, account, symbol.as_ref(), quantity, None)
         .await?;
 
     info!("Order submitted ✅");

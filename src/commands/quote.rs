@@ -9,7 +9,7 @@ pub async fn handle(args: QuoteArgs) -> Result<()> {
     let client = bourso_api::get_client();
     let quotes = client
         .get_ticks(
-            args.symbol.as_str(),
+            args.symbol.as_ref(),
             args.length.days(),
             args.period.value(),
         )

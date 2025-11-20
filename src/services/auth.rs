@@ -17,11 +17,13 @@ pub struct StdinCredentialsProvider;
 impl CredentialsProvider for StdinCredentialsProvider {
     fn read_password(&self) -> Result<Password> {
         print!("Enter your password (hidden): ");
-        Ok(rpassword::read_password()?.try_into()?)
+        let password = Password::new(&rpassword::read_password()?)?;
+        Ok(password)
     }
     fn read_mfa_code(&self) -> Result<MfaCode> {
         print!("Enter your MFA code (hidden): ");
-        Ok(rpassword::read_password()?.try_into()?)
+        let mfa_code = MfaCode::new(&rpassword::read_password()?)?;
+        Ok(mfa_code)
     }
 }
 

@@ -20,6 +20,7 @@ tracing              = { version = "0.1.41" }
 futures-util         = { version = "0.3.31" }
 async-stream         = { version = "0.3.6" }
 thiserror            = { version = "2.0.17" }
+derive_more          = { version = "2.0.1", features = ["from", "into", "as_ref"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
