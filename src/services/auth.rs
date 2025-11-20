@@ -7,26 +7,25 @@ use bourso_api::{
     types::{ClientNumber, MfaCode, Password},
 };
 
-// TODO: fix naming, too many mismatches with customer_id / username / client_id / client_number
 // TODO: does it make sense to have MFA handling in the CLI?
 
-pub trait CredentialsProvider: Send + Sync {
-    fn read_password(&self, prompt: &str) -> Result<Password>;
-    fn read_mfa_code(&self, prompt: &str) -> Result<MfaCode>;
+pub trait CredentialsProvider {
+    fn read_password(&self) -> Result<Password>;
+    fn read_mfa_code(&self) -> Result<MfaCode>;
 }
 pub struct StdinCredentialsProvider;
 impl CredentialsProvider for StdinCredentialsProvider {
-    fn read_password(&self, prompt: &str) -> Result<Password> {
-        println!("{prompt}");
+    fn read_password(&self) -> Result<Password> {
+        print!("Enter your password (hidden): ");
         Ok(rpassword::read_password()?.try_into()?)
     }
-    fn read_mfa_code(&self, prompt: &str) -> Result<MfaCode> {
-        println!("{prompt}");
+    fn read_mfa_code(&self) -> Result<MfaCode> {
+        print!("Enter your MFA code (hidden): ");
         Ok(rpassword::read_password()?.try_into()?)
     }
 }
 
-pub trait ClientFactory: Send + Sync {
+pub trait ClientFactory {
     fn new_client(&self) -> BoursoWebClient;
 }
 pub struct DefaultClientFactory;
@@ -65,31 +64,30 @@ impl<'a> AuthService<'a> {
 
     pub async fn login(&self) -> Result<Option<BoursoWebClient>> {
         let settings = self.settings_store.load()?;
-        let Some(client_number) = settings.client_number.clone() else {
+        let Some(client_number) = settings.client_number.as_ref() else {
             warn!("No client number found in settings, please run `bourso config` to set it");
             return Ok(None);
         };
 
         info!(
             "We'll try to log you in with your customer id: {:?}",
-            client_number.as_str()
+            client_number.as_ref()
         );
         info!("If you want to change it, you can run `bourso config` to set it");
         println!();
 
         let password = match settings.password.as_ref() {
-            Some(password) => password.clone(),
+            Some(password) => password,
             None => {
                 info!("We'll need your password to log you in. It will not be stored.");
-                self.credentials_provider
-                    .read_password("Enter your password (hidden):")?
+                &self.credentials_provider.read_password()?
             }
         };
 
         let mut client = self.client_factory.new_client();
         client.init_session().await?;
         match client
-            .login(client_number.as_str(), password.as_str())
+            .login(client_number.as_ref(), password.as_ref())
             .await
         {
             Ok(_) => {
@@ -98,7 +96,7 @@ impl<'a> AuthService<'a> {
             }
             Err(e) => {
                 if let Some(ClientError::MfaRequired) = e.downcast_ref::<ClientError>() {
-                    self.handle_mfa(client, &client_number, &password).await
+                    self.handle_mfa(client, client_number, password).await
                 } else {
                     Err(e)
                 }
@@ -118,19 +116,17 @@ impl<'a> AuthService<'a> {
                 warn!("MFA threshold reached. Reinitializing session and logging in again.");
                 client.init_session().await?;
                 client
-                    .login(client_number.as_str(), password.as_str())
+                    .login(client_number.as_ref(), password.as_ref())
                     .await?;
                 info!("Login successful ✅");
                 return Ok(Some(client));
             }
 
             let (otp_id, token_form, mfa_type) = client.request_mfa().await?;
-            let code = self
-                .credentials_provider
-                .read_mfa_code("Enter your MFA code (hidden):")?;
+            let code = &self.credentials_provider.read_mfa_code()?;
 
             match client
-                .submit_mfa(mfa_type, otp_id, code.as_str().to_string(), token_form)
+                .submit_mfa(mfa_type, otp_id, code.as_ref().to_string(), token_form)
                 .await
             {
                 Ok(_) => {

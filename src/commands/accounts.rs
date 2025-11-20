@@ -6,7 +6,7 @@ use crate::{cli::AccountsArgs, services::AuthService, AppCtx};
 use bourso_api::account::{Account, AccountKind};
 
 pub async fn handle(args: AccountsArgs, ctx: &AppCtx) -> Result<()> {
-    let auth_service = AuthService::with_defaults(&*ctx.settings_store);
+    let auth_service = AuthService::with_defaults(ctx.settings_store.as_ref());
 
     let Some(client) = auth_service.login().await? else {
         return Ok(());

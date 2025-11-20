@@ -25,7 +25,7 @@ pub async fn handle(args: OrderArgs, ctx: &AppCtx) -> Result<()> {
 }
 
 async fn new_order(args: OrderNewArgs, ctx: &AppCtx) -> Result<()> {
-    let auth = AuthService::with_defaults(&*ctx.settings_store);
+    let auth = AuthService::with_defaults(ctx.settings_store.as_ref());
 
     let Some(client) = auth.login().await? else {
         return Ok(());
