@@ -18,12 +18,12 @@ pub async fn handle(args: TransferArgs, ctx: &AppCtx) -> Result<()> {
     let from_account = accounts
         .iter()
         .find(|a| a.id == args.from_account.as_ref().as_str()) // TODO: compare AccountId instead of String
-        .context("From account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+        .context("From account not found. Are you sure you have access to it? Run `bourso-cli accounts` to list your accounts")?;
 
     let to_account = accounts
         .iter()
         .find(|a| a.id == args.to_account.as_ref().as_str()) // TODO: compare AccountId instead of String
-        .context("To account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+        .context("To account not found. Are you sure you have access to it? Run `bourso-cli accounts` to list your accounts")?;
 
     let stream = client.transfer_funds(
         args.amount.get(),

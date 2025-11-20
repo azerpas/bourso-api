@@ -36,7 +36,7 @@ async fn new_order(args: OrderNewArgs, ctx: &AppCtx) -> Result<()> {
     let account = accounts
         .iter()
         .find(|a| a.id == args.account.as_ref().as_str())  // TODO: compare AccountId instead of String
-        .context("Account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+        .context("Account not found. Are you sure you have access to it? Run `bourso-cli accounts` to list your accounts")?;
 
     let side: OrderSide = args.side;
     let quantity: usize = args.quantity.get() as usize;

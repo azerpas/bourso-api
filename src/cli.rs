@@ -99,7 +99,7 @@ pub struct OrderListArgs {}
 
 #[derive(Args)]
 pub struct OrderNewArgs {
-    /// Account to use by its ID (32 hex chars), you can get it with the `bourso accounts` command
+    /// Account to use by its ID (32 hex chars), you can get it with the `bourso-cli accounts` command
     #[arg(short, long, value_name = "ID", value_parser = value_parser!(AccountId))]
     pub account: AccountId,
 
@@ -157,11 +157,11 @@ pub enum QuoteView {
 
 #[derive(Args)]
 pub struct TransferArgs {
-    /// Source account ID (32 hex chars), you can get it with the `bourso accounts` command
+    /// Source account ID (32 hex chars), you can get it with the `bourso-cli accounts` command
     #[arg(long = "from", value_name = "ID", value_parser = value_parser!(AccountId))]
     pub from_account: AccountId,
 
-    /// Destination account ID (32 hex chars), you can get it with the `bourso accounts` command
+    /// Destination account ID (32 hex chars), you can get it with the `bourso-cli accounts` command
     #[arg(long = "to", value_name = "ID", value_parser = value_parser!(AccountId))]
     pub to_account: AccountId,
 

@@ -72,7 +72,7 @@ impl<'a> AuthService<'a> {
     pub async fn login(&self) -> Result<Option<BoursoWebClient>> {
         let settings = self.settings_store.load()?;
         let Some(client_number) = settings.client_number.as_ref() else {
-            warn!("No client number found in settings, please run `bourso config` to set it");
+            warn!("No client number found in settings, please run `bourso-cli config` to set it");
             return Ok(None);
         };
 
@@ -80,7 +80,7 @@ impl<'a> AuthService<'a> {
             "We'll try to log you in with your customer id: {:?}",
             client_number.as_ref()
         );
-        info!("If you want to change it, you can run `bourso config` to set it");
+        info!("If you want to change it, you can run `bourso-cli config` to set it");
         println!();
 
         let password = match settings.password.as_ref() {
