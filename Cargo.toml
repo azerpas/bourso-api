@@ -11,7 +11,7 @@ version     = "1.0.0"
 [dependencies]
 anyhow             = { version = "1.0.100" }
 bourso_api         = { path = "./src/bourso_api" }
-clap               = { version = "4.5.51", features = ["derive"] }
+clap               = { version = "4.5.53", features = ["derive"] }
 directories        = { version = "6.0.0" }
 futures-util       = { version = "0.3.31" }
 rpassword          = { version = "7.4.0" }

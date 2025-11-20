@@ -6,19 +6,19 @@ version = "0.4.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow               = { version = "1.0.75" }
+anyhow               = { version = "1.0.100" }
 async-stream         = { version = "0.3.6" }
-chrono               = { version = "0.4.39" }
-clap                 = { version = "4.5.26", features = ["derive"] }
-cookie_store         = { version = "0.21.1" }
+chrono               = { version = "0.4.42" }
+clap                 = { version = "4.5.53", features = ["derive"] }
+cookie_store         = { version = "0.22.0" }
 derive_more          = { version = "2.0.1", features = ["from", "into", "as_ref"] }
 futures-util         = { version = "0.3.31" }
-lazy_static          = { version = "1.4.0" }
-regex                = { version = "1.10.2" }
-reqwest              = { version = "0.12.12", features = ["multipart", "cookies"] }
-reqwest_cookie_store = { version = "0.8.0" }
-serde                = { version = "1.0.189", features = ["derive"] }
-serde_json           = { version = "1.0.107" }
+lazy_static          = { version = "1.5.0" }
+regex                = { version = "1.12.2" }
+reqwest              = { version = "0.12.24", features = ["multipart", "cookies"] }
+reqwest_cookie_store = { version = "0.9.0" }
+serde                = { version = "1.0.228", features = ["derive"] }
+serde_json           = { version = "1.0.145" }
 thiserror            = { version = "2.0.17" }
 tracing              = { version = "0.1.41" }
 
