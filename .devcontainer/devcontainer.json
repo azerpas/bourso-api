@@ -15,6 +15,7 @@
                 "rust-analyzer.check.command": "clippy",
                 "evenBetterToml.formatter.alignEntries": true,
                 "evenBetterToml.formatter.columnWidth": 100,
+                "evenBetterToml.formatter.reorderKeys": true,
                 "[rust]": {
                     "editor.defaultFormatter": "rust-lang.rust-analyzer"
                 },
