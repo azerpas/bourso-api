@@ -81,7 +81,7 @@ impl MfaType {
 impl BoursoWebClient {
     pub fn new() -> BoursoWebClient {
         // create a new client
-        let cookie_store = CookieStore::new(None);
+        let cookie_store = CookieStore::new();
         let cookie_store = CookieStoreMutex::new(cookie_store);
         let cookie_store = Arc::new(cookie_store);
         BoursoWebClient {
