@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::io::{stdout, Write};
 use tracing::{info, warn};
 
 use crate::settings::SettingsStore;
@@ -16,13 +17,17 @@ pub trait CredentialsProvider {
 pub struct StdinCredentialsProvider;
 impl CredentialsProvider for StdinCredentialsProvider {
     fn read_password(&self) -> Result<Password> {
-        print!("Enter your password (hidden): ");
+        print!("\nEnter your password (hidden): ");
+        let _ = stdout().flush();
         let password = Password::new(&rpassword::read_password()?)?;
+        println!();
         Ok(password)
     }
     fn read_mfa_code(&self) -> Result<MfaCode> {
-        print!("Enter your MFA code (hidden): ");
+        print!("\nEnter your MFA code (hidden): ");
+        let _ = stdout().flush();
         let mfa_code = MfaCode::new(&rpassword::read_password()?)?;
+        println!();
         Ok(mfa_code)
     }
 }
