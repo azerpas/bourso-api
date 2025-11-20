@@ -1,12 +1,9 @@
 use clap::{value_parser, Args, Parser, Subcommand};
 use std::path::PathBuf;
 
-use bourso_api::{
-    client::trade::order::OrderSide,
-    types::{
-        AccountId, ClientNumber, MoneyAmount, OrderQuantity, QuoteLength, QuotePeriod, SymbolId,
-        TransferReason,
-    },
+use bourso_api::types::{
+    AccountId, ClientNumber, MoneyAmount, OrderQuantity, OrderSide, QuoteLength, QuotePeriod,
+    SymbolId, TransferReason,
 };
 
 // TODO: add debug option
@@ -106,8 +103,8 @@ pub struct OrderNewArgs {
     #[arg(short, long, value_name = "ID", value_parser = value_parser!(AccountId))]
     pub account: AccountId,
 
-    /// Side of the order (buy/sell)
-    #[arg(long, value_parser = value_parser!(OrderSide))]
+    /// Side of the order
+    #[arg(long, default_value = "buy")]
     pub side: OrderSide,
 
     /// Symbol ID of the order (e.g: "1rTCW8")
@@ -129,11 +126,7 @@ pub struct QuoteArgs {
     pub symbol: SymbolId,
 
     /// Length period of the stock
-    #[arg(
-        long,
-        default_value = "30",
-        value_parser = value_parser!(QuoteLength)
-    )]
+    #[arg(long, default_value = "30")]
     pub length: QuoteLength,
 
     /// Period of the stock

@@ -183,7 +183,15 @@ impl QuoteLength {
     }
 }
 
-// TODO: add support for other periods
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ValueEnum)]
+pub enum OrderSide {
+    #[serde(rename = "B")]
+    Buy,
+    #[serde(rename = "S")]
+    Sell,
+}
+
+// TODO: support only 0 period for now, add support for other periods
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QuotePeriod(i64);
 impl QuotePeriod {

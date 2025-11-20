@@ -6,6 +6,7 @@ use tracing::{debug, info};
 use crate::{
     account::{Account, AccountKind},
     client::config::Config,
+    types::OrderSide,
 };
 
 use super::{get_trading_base_url, BoursoWebClient};
@@ -524,15 +525,6 @@ pub enum OrderKind {
     OneCancelsOther,
     #[serde(rename = "TAL")]
     TradeAtLast,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default, clap::ValueEnum)]
-pub enum OrderSide {
-    #[default]
-    #[serde(rename = "B")]
-    Buy,
-    #[serde(rename = "S")]
-    Sell,
 }
 
 /// Order data submitted to the `/ordersimple/check` endpoint

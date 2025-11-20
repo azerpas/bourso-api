@@ -8,7 +8,7 @@ use crate::{
 };
 
 use bourso_api::account::AccountKind;
-use bourso_api::client::trade::order::OrderSide;
+use bourso_api::types::OrderSide;
 
 pub async fn handle(args: OrderArgs, ctx: &AppCtx) -> Result<()> {
     match args.command {
