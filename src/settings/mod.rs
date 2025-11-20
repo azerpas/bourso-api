@@ -1,4 +1,4 @@
-mod consts;
+mod constants;
 mod logging;
 mod store;
 

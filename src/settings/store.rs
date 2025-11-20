@@ -9,7 +9,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::settings::consts::{APP_NAME, APP_ORGANIZATION, APP_QUALIFIER, SETTINGS_FILE};
+use crate::settings::constants::{APP_NAME, APP_ORGANIZATION, APP_QUALIFIER, SETTINGS_FILE};
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Settings {

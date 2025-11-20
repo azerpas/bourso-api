@@ -12,7 +12,7 @@ use tracing_subscriber::{
     registry, EnvFilter,
 };
 
-use crate::settings::consts::{
+use crate::settings::constants::{
     APP_NAME, APP_ORGANIZATION, APP_QUALIFIER, DEFAULT_LOG_LEVEL, LOG_FILE,
 };
 
