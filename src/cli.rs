@@ -1,15 +1,20 @@
-use bourso_api::client::trade::order::OrderSide;
 use clap::{value_parser, Args, Parser, Subcommand};
+use std::path::PathBuf;
+
+use bourso_api::types::{
+    AccountId, ClientNumber, MoneyAmount, OrderQuantity, OrderSide, QuoteLength, QuotePeriod,
+    SymbolId, TransferReason,
+};
 
 // TODO: add debug option
-// TODO: add type to fix primitive obsession (AccountId w/ FromStr impl) and value_parser
+// TODO: add type to fix primitive obsession and value_parser (AccountId, QuoteInterval, QuoteLength, ...)
 
 #[derive(Parser)]
 #[command(version, author, about, long_about = None)]
 pub struct Cli {
     /// Optional path to credentials JSON file
-    #[arg(short, long, value_name = "FILE")]
-    pub credentials: Option<String>,
+    #[arg(short, long, value_name = "FILE", value_parser = value_parser!(PathBuf))]
+    pub credentials: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -35,9 +40,9 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct ConfigArgs {
-    /// Your customer ID
-    #[arg(short, long, value_name = "ID")]
-    pub username: String,
+    /// Your client number
+    #[arg(short, long, value_name = "ID", value_parser = value_parser!(ClientNumber))]
+    pub client_number: ClientNumber,
 }
 
 #[derive(Args)]
@@ -95,20 +100,20 @@ pub struct OrderListArgs {}
 #[derive(Args)]
 pub struct OrderNewArgs {
     /// Account to use by its ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(short, long, value_name = "ID", value_parser = parse_account_id)]
-    pub account: String,
+    #[arg(short, long, value_name = "ID", value_parser = value_parser!(AccountId))]
+    pub account: AccountId,
 
-    /// Side of the order (buy/sell)
-    #[arg(long, value_parser = clap::value_parser!(OrderSide))]
+    /// Side of the order
+    #[arg(long, default_value = "buy")]
     pub side: OrderSide,
 
     /// Symbol ID of the order (e.g: "1rTCW8")
-    #[arg(long, value_name = "ID")]
-    pub symbol: String,
+    #[arg(long, value_name = "ID", value_parser = value_parser!(SymbolId))]
+    pub symbol: SymbolId,
 
     /// Quantity of the order (e.g: 1)
-    #[arg(short, long, value_parser = value_parser!(u64).range(1..))]
-    pub quantity: u64,
+    #[arg(short, long, value_parser = value_parser!(OrderQuantity))]
+    pub quantity: OrderQuantity,
 }
 
 #[derive(Args)]
@@ -117,20 +122,16 @@ pub struct OrderCancelArgs {}
 #[derive(Args)]
 pub struct QuoteArgs {
     /// Symbol ID of the stock (e.g: "1rTCW8")
-    #[arg(long, value_name = "ID")]
-    pub symbol: String,
+    #[arg(long, value_name = "ID", value_parser = value_parser!(SymbolId))]
+    pub symbol: SymbolId,
 
-    /// Length period of the stock (1, 5, 30, 90, 180, 365, 1825, 3650)
-    #[arg(
-        long,
-        default_value = "30",
-        value_parser = ["1","5","30","90","180","365","1825","3650"]
-    )]
-    pub length: String,
+    /// Length period of the stock
+    #[arg(long, default_value = "30")]
+    pub length: QuoteLength,
 
-    /// Interval of the stock (use "0" for default)
-    #[arg(long, default_value = "0", value_parser = ["0"])]
-    pub interval: String,
+    /// Period of the stock
+    #[arg(long, default_value = "0", value_parser = value_parser!(QuotePeriod))]
+    pub period: QuotePeriod,
 
     #[command(subcommand)]
     pub view: Option<QuoteView>,
@@ -157,27 +158,18 @@ pub enum QuoteView {
 #[derive(Args)]
 pub struct TransferArgs {
     /// Source account ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(long = "from", value_name = "ID", value_parser = parse_account_id)]
-    pub from_account: String,
+    #[arg(long = "from", value_name = "ID", value_parser = value_parser!(AccountId))]
+    pub from_account: AccountId,
 
     /// Destination account ID (32 hex chars), you can get it with the `bourso accounts` command
-    #[arg(long = "to", value_name = "ID", value_parser = parse_account_id)]
-    pub to_account: String,
+    #[arg(long = "to", value_name = "ID", value_parser = value_parser!(AccountId))]
+    pub to_account: AccountId,
 
     /// Amount to transfer
-    #[arg(long)]
-    pub amount: String,
+    #[arg(long, value_parser = value_parser!(MoneyAmount))]
+    pub amount: MoneyAmount,
 
     /// Reason for the transfer (max 50 chars)
-    #[arg(long)]
-    pub reason: Option<String>,
-}
-
-fn parse_account_id(s: &str) -> Result<String, String> {
-    let t = s.trim();
-    if t.len() == 32 && t.chars().all(|c| c.is_ascii_hexdigit()) {
-        Ok(t.to_owned())
-    } else {
-        Err("Account ID must be 32 hex characters (0-9, a-f)".into())
-    }
+    #[arg(long, value_parser = value_parser!(TransferReason))]
+    pub reason: Option<TransferReason>,
 }
