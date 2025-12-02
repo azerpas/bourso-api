@@ -39,16 +39,14 @@ Choose the right binary for your OS between:
 
 #### Approve the app (MacOS)
 
-If you then get a `"bourso-cli" cannot be opened because the developer cannot be verified` error, go to `System Preferences > Security & Privacy > General` and click `Open Anyway`
+On MacOS, you may need to allow the app to run.
 
-If the above doesn't help you, make sure the file is executable:
-```sh
-chmod +x bourso-cli
-# if it still says `Permission denied`, try
-chown 777 bourso-cli
+Make sure you move the app to your Applications folder before running it.
+
+Then run the following command in your terminal:
 ```
-
-⚠️ Signing in with a different IP address than the ones you usually use will trigger a security check from Bourso. You'll have to validate the connection from your phone. A [GitHub pull request](https://github.com/azerpas/bourso-api/pull/10) is open to handle this case.
+xattr -r -d com.apple.quarantine /path/to/bourso-cli
+```
 
 #### Verify your installation
 Bourso CLI embeds [SLSA](https://slsa.dev/) standard to verify the integrity of the binary. You can verify the signature of the binary by:
@@ -81,6 +79,8 @@ Save your client ID with this config command:
 ./bourso-cli config
 ```
 The password will be asked each time you run the app to avoid storing it in a file.
+
+⚠️ Signing in with a different IP address than the ones you usually use will trigger a security check from Bourso. You'll have to complete the MFA (Multi-Factor Authentication) process to log in successfully.
 
 ### Get your accounts
 ```
