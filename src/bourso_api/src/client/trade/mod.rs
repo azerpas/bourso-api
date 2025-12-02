@@ -118,5 +118,5 @@ pub struct AccountSummary {
     pub gain_loss_percent: SummaryValue,
     pub liquidation_amount: SummaryValue,
     /// Cash deposited
-    pub contribution: i64,
+    pub contribution: f64,
 }
