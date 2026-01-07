@@ -61,6 +61,14 @@ impl fmt::Display for MfaType {
 }
 
 impl MfaType {
+    /// Returns the API path segment: "otp" for email/sms, "challenge" for webtoapp
+    pub fn api_path(&self) -> &'static str {
+        match self {
+            MfaType::Email | MfaType::Sms => "otp",
+            MfaType::WebToApp => "challenge",
+        }
+    }
+
     pub fn start_path(&self) -> &'static str {
         match self {
             MfaType::Email => "startemail",
@@ -369,9 +377,10 @@ impl BoursoWebClient {
         let token_form = extract_token(&res)?;
 
         let url = format!(
-            "{}/_user_/_{}_/session/otp/{}/{}",
+            "{}/_user_/_{}_/session/{}/{}/{}",
             self.config.api_url,
             self.config.user_hash.as_ref().unwrap(),
+            mfa_type.api_path(),
             mfa_type.start_path(),
             otp_id
         );
@@ -381,6 +390,7 @@ impl BoursoWebClient {
             .client
             .post(url)
             .body("{}")
+            .header("Content-Type", "application/json; charset=utf-8")
             .headers(self.get_headers())
             .send()
             .await?;
@@ -416,9 +426,10 @@ impl BoursoWebClient {
         token_form: String,
     ) -> Result<()> {
         let url = format!(
-            "{}/_user_/_{}_/session/otp/{}/{}",
+            "{}/_user_/_{}_/session/{}/{}/{}",
             self.config.api_url,
             self.config.user_hash.as_ref().unwrap(),
+            mfa_type.api_path(),
             mfa_type.check_path(),
             otp_id
         );
@@ -550,7 +561,7 @@ fn extract_token(res: &str) -> Result<String> {
 }
 
 fn extract_start_otp_url(res: &str) -> Result<String> {
-    let regex = Regex::new(r"(?m)\\/services\\/api\\/v[\d.]*?\\/_user_\\/_\{userHash\}_\\/session\\/otp\\/start.*?\\/\d+").unwrap();
+    let regex = Regex::new(r"(?m)\\/services\\/api\\/v[\d.]*?\\/_user_\\/_\{userHash\}_\\/session\\/(otp|challenge)\\/start.*?\\/\d+").unwrap();
 
     let captures = regex.captures(&res);
 
@@ -596,6 +607,16 @@ mod tests {
         assert_eq!(
             start_sms_otp_url,
             "/services/api/v1.7/_user_/_{userHash}_/session/otp/startsms/99999"
+        );
+    }
+
+    #[test]
+    fn test_extract_start_webtoapp_challenge_url() {
+        let res = r#"&quot;actions&quot;:{&quot;start&quot;:{&quot;api&quot;:&quot;\/_user_\/_{userHash}_\/session\/challenge\/startwebtoapp\/12345&quot;,&quot;url&quot;:&quot;\/services\/api\/v1.7\/_user_\/_{userHash}_\/session\/challenge\/startwebtoapp\/12345&quot;},&quot;check&quot;:{&quot;api&quot;:&quot;\/_user_\/_{userHash}_\/session\/challenge\/checkwebtoapp\/12345&quot;,&quot;url&quot;:&quot;\/services\/api\/v1.7\/_user_\/_{userHash}_\/session\/challenge\/checkwebtoapp\/12345&quot;}}"#;
+        let start_url = extract_start_otp_url(&res).unwrap();
+        assert_eq!(
+            start_url,
+            "/services/api/v1.7/_user_/_{userHash}_/session/challenge/startwebtoapp/12345"
         );
     }
 }
