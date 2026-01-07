@@ -12,6 +12,7 @@ tokio              = { version = "1.33.0", features = ["full"] }
 anyhow             = { version = "1.0.75" }
 clap               = { version = "4.4.6" }
 rpassword          = { version = "7.2.0" }
+keyring            = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 directories        = { version = "5.0.1" }
 serde              = { version = "1.0.189", features = ["derive"] }
 serde_json         = { version = "1.0.107" }

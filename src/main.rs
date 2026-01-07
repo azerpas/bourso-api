@@ -52,12 +52,34 @@ async fn main() -> Result<()> {
         )
         .subcommand(
             Command::new("config")
-                .about("Configure BoursoBank/Boursorama CLI")
+                .about("Configure BoursoBank/Boursorama CLI credentials")
                 .arg(
                     Arg::new("username")
                         .short('u')
                         .long("username")
                         .help("Your customer id")
+                )
+                .arg(
+                    Arg::new("save_password")
+                        .long("save-password")
+                        .help("Store your password securely in the OS keyring")
+                        .action(clap::ArgAction::SetTrue)
+                )
+                .arg(
+                    Arg::new("delete_password")
+                        .long("delete-password")
+                        .help("Remove your password from the OS keyring")
+                        .action(clap::ArgAction::SetTrue)
+                )
+                .arg(
+                    Arg::new("show")
+                        .long("show")
+                        .help("Show current configuration status")
+                        .action(clap::ArgAction::SetTrue)
+                )
+                .group(
+                    clap::ArgGroup::new("config_action")
+                        .args(["username", "save_password", "delete_password", "show"])
                         .required(true)
                 )
         )
