@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::io::IsTerminal;
 use bourso_api::{
     account::{Account, AccountKind},
     client::{
@@ -12,6 +13,7 @@ use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
 use tracing::{debug, info, warn};
 
+pub mod keyring;
 pub mod settings;
 pub mod validate;
 
@@ -35,15 +37,70 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     match matches.subcommand() {
         // These matches do not require authentication
         Some(("config", config_matches)) => {
-            let customer_id = config_matches
-                .get_one::<String>("username")
-                .map(|s| s.as_str())
-                .unwrap();
-            save_settings(&Settings {
-                customer_id: Some(customer_id.to_string()),
-                password: None,
-            })?;
-            info!("Configuration saved ✅");
+            // Handle --username
+            if let Some(customer_id) = config_matches.get_one::<String>("username") {
+                save_settings(&Settings {
+                    customer_id: Some(customer_id.to_string()),
+                    password: None,
+                })?;
+                info!("Customer ID saved ✅");
+                return Ok(());
+            }
+
+            // Handle --save-password
+            if config_matches.get_flag("save_password") {
+                let customer_id = settings.customer_id.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No customer ID configured. Run `bourso config --username <id>` first."
+                    )
+                })?;
+
+                let password = rpassword::prompt_password("Enter your password: ")
+                    .context("Failed to read password")?
+                    .trim()
+                    .to_string();
+
+                keyring::store_password(&customer_id, &password)?;
+                info!("Password stored securely in OS keyring ✅");
+                return Ok(());
+            }
+
+            // Handle --delete-password
+            if config_matches.get_flag("delete_password") {
+                let customer_id = settings.customer_id.clone().ok_or_else(|| {
+                    anyhow::anyhow!("No customer ID configured.")
+                })?;
+
+                keyring::delete_password(&customer_id)?;
+                info!("Password removed from OS keyring ✅");
+                return Ok(());
+            }
+
+            // Handle --show
+            if config_matches.get_flag("show") {
+                info!("Current configuration:");
+                match &settings.customer_id {
+                    Some(id) => info!("  Customer ID: {}", id),
+                    None => info!("  Customer ID: (not configured)"),
+                }
+
+                if let Some(ref id) = settings.customer_id {
+                    if keyring::try_get_password(id).is_some() {
+                        info!("  Password: stored in OS keyring ✅");
+                    } else {
+                        info!("  Password: (not stored - will prompt each time)");
+                    }
+                }
+
+                if keyring::is_available() {
+                    info!("  Keyring: available ✅");
+                } else {
+                    warn!("  Keyring: not available on this system");
+                }
+                return Ok(());
+            }
+
+            warn!("No configuration option specified. Use --help for options.");
             return Ok(());
         }
         Some(("quote", quote_matches)) => {
@@ -135,15 +192,39 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     );
     info!("If you want to change it, run `bourso config --username <customer_id>`");
     println!("");
-    info!("We'll need your password to log you in. It will not be stored anywhere and will be asked everytime you run a command. The password will be hidden while typing.");
 
-    // Get password from stdin
-    let password = match settings.password {
-        Some(password) => password,
-        None => rpassword::prompt_password("Enter your password: ")
+    // Get password with fallback chain: keyring -> settings -> interactive prompt
+    let password = if let Some(pwd) = keyring::try_get_password(&customer_id) {
+        debug!("Using password from OS keyring");
+        pwd
+    } else if let Some(pwd) = settings.password {
+        warn!(
+            "Password found in settings file. Consider migrating to secure keyring storage \
+             with `bourso config --save-password`"
+        );
+        pwd
+    } else {
+        // Check if we have a TTY for interactive prompt
+        if !std::io::stdin().is_terminal() {
+            return Err(anyhow::anyhow!(
+                "No password available and not running interactively. \
+                 Store password with `bourso config --save-password` for automated use."
+            ));
+        }
+
+        info!(
+            "We'll need your password to log you in. It will not be stored anywhere \
+             and will be asked every time you run a command."
+        );
+        info!(
+            "Tip: Run `bourso config --save-password` to store your password securely \
+             in the OS keyring for automated/cron usage."
+        );
+
+        rpassword::prompt_password("Enter your password: ")
             .context("Failed to read password")?
             .trim()
-            .to_string(),
+            .to_string()
     };
 
     let mut web_client: BoursoWebClient = get_client();
