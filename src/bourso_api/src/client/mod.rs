@@ -537,9 +537,16 @@ fn extract_brs_mit_cookie(res: &str) -> Result<String> {
 }
 
 fn extract_token(res: &str) -> Result<String> {
-    let token = TOKEN_REGEX.captures(&res).unwrap().name("token").unwrap();
+    let token = TOKEN_REGEX
+        .captures(&res)
+        .and_then(|c| c.name("token"))
+        .map(|m| m.as_str().trim().to_string())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract form token")
+        })?;
 
-    Ok(token.as_str().trim().to_string())
+    Ok(token)
 }
 
 /// Extract OTP parameters from the response string.
@@ -582,9 +589,16 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
 }
 
 fn extract_user_contact(res: &str) -> Result<String> {
-    let contact_user = USER_CONTACT_REGEX.captures(&res).unwrap().name("contact_user").unwrap();
+    let contact_user = USER_CONTACT_REGEX
+        .captures(&res)
+        .and_then(|c| c.name("contact_user"))
+        .map(|m| m.as_str().trim().to_string())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract user contact")
+        })?;
 
-    Ok(contact_user.as_str().trim().to_string())
+    Ok(contact_user)
 }
 
 #[cfg(test)]
