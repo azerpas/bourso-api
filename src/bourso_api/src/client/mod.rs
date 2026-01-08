@@ -551,7 +551,7 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
         serde_json::from_str::<serde_json::Value>(&decoded)?
     } else {
         error!("{}", res);
-        bail!("Could not extract start sms otp url");
+        bail!("Could not extract authentication challenge parameters");
     };
 
     Ok((
