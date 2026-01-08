@@ -21,6 +21,28 @@ use self::config::{extract_brs_config, Config};
 
 use super::constants::BASE_URL;
 
+lazy_static::lazy_static! {
+    /// Regex to extract OTP parameters from the authentication payload.
+    /// Matches: data-strong-authentication-payload="{...}">
+    static ref OTP_PARAMS_REGEX: Regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#)
+        .expect("Failed to compile OTP parameters regex");
+    
+    /// Regex to extract the __brs_mit cookie value from the response.
+    /// Matches: __brs_mit=<value>;
+    static ref BRS_MIT_COOKIE_REGEX: Regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);")
+        .expect("Failed to compile __brs_mit cookie regex");
+    
+    /// Regex to extract the form token from the login page.
+    /// Matches: form[_token]" ... value="<token>" >
+    static ref TOKEN_REGEX: Regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#)
+        .expect("Failed to compile form token regex");
+    
+    /// Regex to extract the user contact information from the response.
+    /// Matches: userContact&quot;:&quot;<contact>&quot;
+    static ref USER_CONTACT_REGEX: Regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;")
+        .expect("Failed to compile user contact regex");
+}
+
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
     client: reqwest::Client,
@@ -513,24 +535,29 @@ impl BoursoWebClient {
 ///
 /// The __brs_mit cookie as a string.
 fn extract_brs_mit_cookie(res: &str) -> Result<String> {
-    let regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);").unwrap();
-    let captures = regex.captures(&res);
+    let brs_mit_cookie = BRS_MIT_COOKIE_REGEX
+        .captures(&res)
+        .and_then(|c| c.name("brs_mit_cookie"))
+        .map(|m| m.as_str().to_string())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract brs mit cookie")
+        })?;
 
-    if captures.is_none() {
-        error!("{}", res);
-        bail!("Could not extract brs mit cookie");
-    }
-
-    let brs_mit_cookie = captures.unwrap().name("brs_mit_cookie").unwrap();
-
-    Ok(brs_mit_cookie.as_str().to_string())
+    Ok(brs_mit_cookie)
 }
 
 fn extract_token(res: &str) -> Result<String> {
-    let regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#).unwrap();
-    let token = regex.captures(&res).unwrap().name("token").unwrap();
+    let token = TOKEN_REGEX
+        .captures(&res)
+        .and_then(|c| c.name("token"))
+        .map(|m| m.as_str().trim().to_string())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract form token")
+        })?;
 
-    Ok(token.as_str().trim().to_string())
+    Ok(token)
 }
 
 /// Extract OTP parameters from the response string.
@@ -540,19 +567,20 @@ fn extract_token(res: &str) -> Result<String> {
 /// # Returns
 /// A tuple containing the resource ID and form state as strings.
 fn extract_otp_params(res: &str) -> Result<(String, String)> {
-    let regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#);
-
-    let captures = regex.unwrap().captures(&res);
-
-    let challenge_json = if let Some(captures) = captures {
-        let challenge_str = captures.get(1).unwrap().as_str();
-        // HTML decode the JSON string (replace &quot; with ")
-        let decoded = challenge_str.replace("&quot;", "\"");
-        serde_json::from_str::<serde_json::Value>(&decoded)?
-    } else {
-        error!("{}", res);
-        bail!("Could not extract authentication challenge parameters");
-    };
+    let challenge_json = OTP_PARAMS_REGEX
+        .captures(&res)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract authentication challenge parameters")
+        })
+        .and_then(|challenge_str| {
+            // HTML decode the JSON string (replace &quot; with ")
+            let decoded = challenge_str.replace("&quot;", "\"");
+            serde_json::from_str::<serde_json::Value>(&decoded)
+                .map_err(|e| anyhow::anyhow!("Could not parse authentication challenge JSON: {}", e))
+        })?;
 
     Ok((
         challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]["api"]
@@ -575,10 +603,16 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
 }
 
 fn extract_user_contact(res: &str) -> Result<String> {
-    let regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;").unwrap();
-    let contact_user = regex.captures(&res).unwrap().name("contact_user").unwrap();
+    let contact_user = USER_CONTACT_REGEX
+        .captures(&res)
+        .and_then(|c| c.name("contact_user"))
+        .map(|m| m.as_str().trim().to_string())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract user contact")
+        })?;
 
-    Ok(contact_user.as_str().trim().to_string())
+    Ok(contact_user)
 }
 
 #[cfg(test)]
