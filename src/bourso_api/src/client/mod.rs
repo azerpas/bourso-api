@@ -554,17 +554,17 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
         bail!("Could not extract authentication challenge parameters");
     };
 
+    let params = &challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]["api"]["params"];
+    
     Ok((
-        challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]["api"]
-            ["params"]["resourceId"]
+        params["resourceId"]
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| {
                 error!("{}", res);
                 anyhow::anyhow!("Could not extract resourceId")
             })?,
-        challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]["api"]
-            ["params"]["formState"]
+        params["formState"]
             .as_str()
             .map(|s| s.to_string())
             .ok_or_else(|| {
