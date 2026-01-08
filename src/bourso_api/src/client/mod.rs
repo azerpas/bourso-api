@@ -24,6 +24,12 @@ use super::constants::BASE_URL;
 lazy_static::lazy_static! {
     static ref OTP_PARAMS_REGEX: Regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#)
         .expect("Failed to compile OTP parameters regex");
+    static ref BRS_MIT_COOKIE_REGEX: Regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);")
+        .expect("Failed to compile __brs_mit cookie regex");
+    static ref TOKEN_REGEX: Regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#)
+        .expect("Failed to compile form token regex");
+    static ref USER_CONTACT_REGEX: Regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;")
+        .expect("Failed to compile user contact regex");
 }
 
 pub struct BoursoWebClient {
@@ -518,8 +524,7 @@ impl BoursoWebClient {
 ///
 /// The __brs_mit cookie as a string.
 fn extract_brs_mit_cookie(res: &str) -> Result<String> {
-    let regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);").unwrap();
-    let captures = regex.captures(&res);
+    let captures = BRS_MIT_COOKIE_REGEX.captures(&res);
 
     if captures.is_none() {
         error!("{}", res);
@@ -532,8 +537,7 @@ fn extract_brs_mit_cookie(res: &str) -> Result<String> {
 }
 
 fn extract_token(res: &str) -> Result<String> {
-    let regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#).unwrap();
-    let token = regex.captures(&res).unwrap().name("token").unwrap();
+    let token = TOKEN_REGEX.captures(&res).unwrap().name("token").unwrap();
 
     Ok(token.as_str().trim().to_string())
 }
@@ -578,8 +582,7 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
 }
 
 fn extract_user_contact(res: &str) -> Result<String> {
-    let regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;").unwrap();
-    let contact_user = regex.captures(&res).unwrap().name("contact_user").unwrap();
+    let contact_user = USER_CONTACT_REGEX.captures(&res).unwrap().name("contact_user").unwrap();
 
     Ok(contact_user.as_str().trim().to_string())
 }
