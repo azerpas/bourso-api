@@ -22,12 +22,23 @@ use self::config::{extract_brs_config, Config};
 use super::constants::BASE_URL;
 
 lazy_static::lazy_static! {
+    /// Regex to extract OTP parameters from the authentication payload.
+    /// Matches: data-strong-authentication-payload="{...}">
     static ref OTP_PARAMS_REGEX: Regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#)
         .expect("Failed to compile OTP parameters regex");
+    
+    /// Regex to extract the __brs_mit cookie value from the response.
+    /// Matches: __brs_mit=<value>;
     static ref BRS_MIT_COOKIE_REGEX: Regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);")
         .expect("Failed to compile __brs_mit cookie regex");
+    
+    /// Regex to extract the form token from the login page.
+    /// Matches: form[_token]" ... value="<token>" >
     static ref TOKEN_REGEX: Regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#)
         .expect("Failed to compile form token regex");
+    
+    /// Regex to extract the user contact information from the response.
+    /// Matches: userContact&quot;:&quot;<contact>&quot;
     static ref USER_CONTACT_REGEX: Regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;")
         .expect("Failed to compile user contact regex");
 }
