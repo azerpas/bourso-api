@@ -21,6 +21,11 @@ use self::config::{extract_brs_config, Config};
 
 use super::constants::BASE_URL;
 
+lazy_static::lazy_static! {
+    static ref OTP_PARAMS_REGEX: Regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#)
+        .expect("Failed to compile OTP parameters regex");
+}
+
 pub struct BoursoWebClient {
     /// The client used to make requests to the Bourso website.
     client: reqwest::Client,
@@ -540,9 +545,7 @@ fn extract_token(res: &str) -> Result<String> {
 /// # Returns
 /// A tuple containing the resource ID and form state as strings.
 fn extract_otp_params(res: &str) -> Result<(String, String)> {
-    let regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#);
-
-    let captures = regex.unwrap().captures(&res);
+    let captures = OTP_PARAMS_REGEX.captures(&res);
 
     let challenge_json = if let Some(captures) = captures {
         let challenge_str = captures.get(1).unwrap().as_str();
