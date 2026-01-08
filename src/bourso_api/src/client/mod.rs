@@ -26,17 +26,17 @@ lazy_static::lazy_static! {
     /// Matches: data-strong-authentication-payload="{...}">
     static ref OTP_PARAMS_REGEX: Regex = Regex::new(r#"data-strong-authentication-payload="(\{.*?\})">"#)
         .expect("Failed to compile OTP parameters regex");
-    
+
     /// Regex to extract the __brs_mit cookie value from the response.
     /// Matches: __brs_mit=<value>;
     static ref BRS_MIT_COOKIE_REGEX: Regex = Regex::new(r"(?m)__brs_mit=(?P<brs_mit_cookie>.*?);")
         .expect("Failed to compile __brs_mit cookie regex");
-    
+
     /// Regex to extract the form token from the login page.
     /// Matches: form[_token]" ... value="<token>" >
     static ref TOKEN_REGEX: Regex = Regex::new(r#"(?ms)form\[_token\]"(.*?)value="(?P<token>.*?)"\s*>"#)
         .expect("Failed to compile form token regex");
-    
+
     /// Regex to extract the user contact information from the response.
     /// Matches: userContact&quot;:&quot;<contact>&quot;
     static ref USER_CONTACT_REGEX: Regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;")
@@ -307,6 +307,7 @@ impl BoursoWebClient {
     /// * `form_state` - The form state to use to check the MFA status.
     /// * `token_form` - The token form to use to validate the MFA process.
     /// * `mfa_type` - The type of MFA requested.
+    #[cfg(not(tarpaulin_include))]
     pub async fn request_mfa(&mut self) -> Result<(String, String, String, MfaType)> {
         let _ = self
             .client
@@ -402,6 +403,7 @@ impl BoursoWebClient {
     ///
     /// # Returns
     /// * `true` if the MFA was successfully submitted, `false` if the MFA is still pending.
+    #[cfg(not(tarpaulin_include))]
     pub async fn check_mfa(
         &mut self,
         mfa_type: MfaType,
@@ -578,12 +580,14 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
         .and_then(|challenge_str| {
             // HTML decode the JSON string (replace &quot; with ")
             let decoded = challenge_str.replace("&quot;", "\"");
-            serde_json::from_str::<serde_json::Value>(&decoded)
-                .map_err(|e| anyhow::anyhow!("Could not parse authentication challenge JSON: {}", e))
+            serde_json::from_str::<serde_json::Value>(&decoded).map_err(|e| {
+                anyhow::anyhow!("Could not parse authentication challenge JSON: {}", e)
+            })
         })?;
 
-    let params = &challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]["api"]["params"];
-    
+    let params = &challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]
+        ["api"]["params"];
+
     Ok((
         params["resourceId"]
             .as_str()

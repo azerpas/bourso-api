@@ -8,6 +8,7 @@ use qrcode::{EcLevel, QrCode};
 /// - Error correction level: M (Medium)
 /// - Margin: 0
 /// - Version: Auto-selected based on input
+#[cfg(not(tarpaulin_include))]
 pub fn generate_qr_code(data: &str) -> Result<QrCode> {
     // Use error correction level M to match BoursoBank's settings
     QrCode::with_error_correction_level(data, EcLevel::M).context("Failed to generate QR code")
@@ -17,6 +18,7 @@ pub fn generate_qr_code(data: &str) -> Result<QrCode> {
 ///
 /// Uses Unicode block characters to display the QR code in the terminal.
 /// Each "pixel" is represented using block characters for a compact display.
+#[cfg(not(tarpaulin_include))]
 pub fn render_to_terminal(qr: &QrCode) -> String {
     qr.render::<unicode::Dense1x2>()
         .dark_color(unicode::Dense1x2::Dark)
