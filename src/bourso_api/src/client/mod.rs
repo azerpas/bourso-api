@@ -524,16 +524,16 @@ impl BoursoWebClient {
 ///
 /// The __brs_mit cookie as a string.
 fn extract_brs_mit_cookie(res: &str) -> Result<String> {
-    let captures = BRS_MIT_COOKIE_REGEX.captures(&res);
+    let brs_mit_cookie = BRS_MIT_COOKIE_REGEX
+        .captures(&res)
+        .and_then(|c| c.name("brs_mit_cookie"))
+        .map(|m| m.as_str().to_string())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract brs mit cookie")
+        })?;
 
-    if captures.is_none() {
-        error!("{}", res);
-        bail!("Could not extract brs mit cookie");
-    }
-
-    let brs_mit_cookie = captures.unwrap().name("brs_mit_cookie").unwrap();
-
-    Ok(brs_mit_cookie.as_str().to_string())
+    Ok(brs_mit_cookie)
 }
 
 fn extract_token(res: &str) -> Result<String> {
@@ -559,7 +559,12 @@ fn extract_otp_params(res: &str) -> Result<(String, String)> {
     let captures = OTP_PARAMS_REGEX.captures(&res);
 
     let challenge_json = if let Some(captures) = captures {
-        let challenge_str = captures.get(1).unwrap().as_str();
+        let challenge_str = captures.get(1)
+            .map(|m| m.as_str())
+            .ok_or_else(|| {
+                error!("{}", res);
+                anyhow::anyhow!("Could not extract authentication challenge from regex match")
+            })?;
         // HTML decode the JSON string (replace &quot; with ")
         let decoded = challenge_str.replace("&quot;", "\"");
         serde_json::from_str::<serde_json::Value>(&decoded)?
