@@ -23,6 +23,8 @@ The first goal of this project was creating an automated [DCA (Dollar Cost Avera
   - [Quote 🥷](#quote)
   - [Transfer funds](#transfer-funds)
   - [DCA](#dca-dollar-cost-averaging-investing)
+- [Contributors](#contributors)
+- [Contributing](#contributing)
 - [Security](#security)
 - [Disclaimer](#disclaimer)
 
@@ -196,6 +198,15 @@ $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoExit -
 # Create a task named "Weekly Bourso CLI Task"
 Register-ScheduledTask -TaskName "Weekly Bourso CLI Task" -Trigger $trigger -Action $action
 ```
+
+## Contributors
+- [azerpas](https://github.com/azerpas)
+- [Mathious6](https://github.com/Mathious6)
+- [mquandalle](https://github.com/mquandalle)
+- [pierrediancourt](https://github.com/pierrediancourt)
+
+## Contributing
+Contributions are welcome! Feel free to open issues or submit pull requests.
 
 ## Security
 This app runs locally. All outbound/inbound data is sent/received to/from BoursoBank servers **only**. Your password will not be saved locally and will be asked each time you run the app. Your client ID has to be configurated and will be saved into the app data for next usages.

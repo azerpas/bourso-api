@@ -154,48 +154,48 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         }
         Err(e) => match e.downcast_ref() {
             Some(bourso_api::client::error::ClientError::MfaRequired) => {
-                let mut mfa_required = true;
-                let mut mfa_count = 0;
-                while mfa_required {
-                    // If MFA is passed twice, it means the user has passed an sms and email mfa
-                    // which should clear the IP. We just need to reinitialize the session
-                    // and login again to access the account.
-                    if mfa_count == 2 {
-                        warn!("MFA thresold reached. Trying to login again by reinitalizing the session.");
-                        web_client = get_client();
-                        web_client.init_session().await?;
-                        match web_client.login(&customer_id, &password).await {
-                            Ok(_) => {
-                                info!("Login successful ✅");
-                                break;
-                            }
-                            Err(e) => {
-                                debug!("{:#?}", e);
-                                return Err(e);
-                            }
-                        }
-                    }
-                    warn!("An MFA is required.");
+                warn!("An MFA is required.");
 
-                    let (otp_id, token, mfa_type) = web_client.request_mfa().await?;
-                    let code = rpassword::prompt_password("Enter your MFA code: ")
-                        .context("Failed to read MFA code")?
-                        .trim()
-                        .to_string();
-                    match web_client.submit_mfa(mfa_type, otp_id, code, token).await {
-                        Ok(_) => {
-                            mfa_required = false;
-                        }
-                        Err(e) => match e.downcast_ref() {
-                            Some(bourso_api::client::error::ClientError::MfaRequired) => {
-                                mfa_count += 1;
-                            }
-                            _ => {
-                                debug!("{:#?}", e);
-                                return Err(e);
-                            }
-                        },
+                let (otp_id, form_state, token, mfa_type) = match web_client.request_mfa().await {
+                    Ok(mfa_info) => mfa_info,
+                    Err(e) => {
+                        debug!("{:#?}", e);
+                        return Err(e);
                     }
+                };
+                info!("To validate your identity, please open the BoursoBank app and validate the login request.");
+
+                // Loop until MFA is ready, timeout after 5 minutes
+                let mut wait_time = 0;
+                let wait_interval = 5;
+                let max_wait_time = 300;
+                loop {
+                    info!(
+                        "Checking MFA status... (waited {}s/{})",
+                        wait_time, max_wait_time
+                    );
+                    let mfa_validated = web_client
+                        .check_mfa(
+                            mfa_type.clone(),
+                            otp_id.clone(),
+                            form_state.clone(),
+                            token.clone(),
+                        )
+                        .await?;
+
+                    if mfa_validated {
+                        break;
+                    }
+
+                    if wait_time >= max_wait_time {
+                        return Err(anyhow::anyhow!(
+                            "MFA validation timed out after {} seconds",
+                            max_wait_time
+                        ));
+                    }
+
+                    wait_time += wait_interval;
+                    tokio::time::sleep(std::time::Duration::from_secs(wait_interval)).await;
                 }
 
                 info!("MFA successful ✅");
