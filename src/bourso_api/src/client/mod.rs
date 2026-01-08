@@ -567,22 +567,20 @@ fn extract_token(res: &str) -> Result<String> {
 /// # Returns
 /// A tuple containing the resource ID and form state as strings.
 fn extract_otp_params(res: &str) -> Result<(String, String)> {
-    let captures = OTP_PARAMS_REGEX.captures(&res);
-
-    let challenge_json = if let Some(captures) = captures {
-        let challenge_str = captures.get(1)
-            .map(|m| m.as_str())
-            .ok_or_else(|| {
-                error!("{}", res);
-                anyhow::anyhow!("Could not extract authentication challenge from regex match")
-            })?;
-        // HTML decode the JSON string (replace &quot; with ")
-        let decoded = challenge_str.replace("&quot;", "\"");
-        serde_json::from_str::<serde_json::Value>(&decoded)?
-    } else {
-        error!("{}", res);
-        bail!("Could not extract authentication challenge parameters");
-    };
+    let challenge_json = OTP_PARAMS_REGEX
+        .captures(&res)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str())
+        .ok_or_else(|| {
+            error!("{}", res);
+            anyhow::anyhow!("Could not extract authentication challenge parameters")
+        })
+        .and_then(|challenge_str| {
+            // HTML decode the JSON string (replace &quot; with ")
+            let decoded = challenge_str.replace("&quot;", "\"");
+            serde_json::from_str::<serde_json::Value>(&decoded)
+                .map_err(|e| anyhow::anyhow!("Could not parse authentication challenge JSON: {}", e))
+        })?;
 
     Ok((
         challenge_json["challenges"][0]["parameters"]["formScreen"]["actions"]["check"]["api"]
