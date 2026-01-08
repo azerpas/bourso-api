@@ -19,6 +19,7 @@ chrono               = { version = "0.4.39" }
 tracing              = { version = "0.1.41" }
 futures-util         = { version = "0.3.31" }
 async-stream         = { version = "0.3.6" }
+qrcode               = { version = "0.14.1" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
