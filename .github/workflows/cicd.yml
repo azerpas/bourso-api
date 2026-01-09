@@ -89,6 +89,7 @@ jobs:
         uses: softprops/action-gh-release@v2.0.4
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          draft: true
           files: |
             target/release/bourso-cli-linux.tar.gz
             target/release/bourso-cli-darwin.tar.gz

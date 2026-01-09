@@ -131,13 +131,18 @@ impl BoursoWebClient {
     /// The headers as a `reqwest::header::HeaderMap`.
     #[cfg(not(tarpaulin_include))]
     fn get_headers(&self) -> reqwest::header::HeaderMap {
+        use rand::prelude::IndexedRandom;
+
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(
-            "user-agent",
+        let uas = [
+            // Chrome on Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            // Chrome on MacOS
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-                .parse()
-                .unwrap(),
-        );
+        ];
+        let ua = uas.choose(&mut rand::rng()).unwrap();
+
+        headers.insert("user-agent", ua.parse().unwrap());
 
         headers
     }
