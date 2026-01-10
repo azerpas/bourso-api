@@ -109,3 +109,4 @@ jobs:
       provenance-name: provenance-id-${{ matrix.os }}.intoto.jsonl
       base64-subjects: "${{ needs.build.outputs[format('hash-{0}', matrix.os)] }}"
       upload-assets: true # Optional: Upload to a new release
+      draft-release: true # Optional: Upload to a draft release

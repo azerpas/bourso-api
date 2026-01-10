@@ -160,13 +160,14 @@ checksum = "1be3f42a67d6d345ecd59f675f3f012d6974981560836e938c22b424b85ce1be"
 
 [[package]]
 name = "bourso-cli"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "anyhow",
  "bourso_api",
  "clap",
  "directories",
  "futures-util",
+ "qrcode",
  "rpassword",
  "serde",
  "serde_json",
@@ -177,7 +178,7 @@ dependencies = [
 
 [[package]]
 name = "bourso_api"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -186,7 +187,6 @@ dependencies = [
  "cookie_store",
  "futures-util",
  "lazy_static",
- "qrcode",
  "rand",
  "regex",
  "reqwest",

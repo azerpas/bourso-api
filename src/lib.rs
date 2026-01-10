@@ -12,6 +12,7 @@ use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
 use tracing::{debug, info, warn};
 
+pub mod qrcode;
 pub mod settings;
 pub mod validate;
 
@@ -174,28 +175,56 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                         "Checking MFA status... (waited {}s/{})",
                         wait_time, max_wait_time
                     );
-                    let mfa_validated = web_client
+                    match web_client
                         .check_mfa(
                             mfa_type.clone(),
                             otp_id.clone(),
                             form_state.clone(),
                             token.clone(),
                         )
-                        .await?;
+                        .await
+                    {
+                        Ok(mfa_validated) => {
+                            if mfa_validated {
+                                break;
+                            }
 
-                    if mfa_validated {
-                        break;
+                            if wait_time >= max_wait_time {
+                                return Err(anyhow::anyhow!(
+                                    "MFA validation timed out after {} seconds",
+                                    max_wait_time
+                                ));
+                            }
+
+                            wait_time += wait_interval;
+                            tokio::time::sleep(std::time::Duration::from_secs(wait_interval)).await;
+                        }
+                        Err(e) => match e.downcast_ref() {
+                            Some(bourso_api::client::error::ClientError::QRCodeRequired(code)) => {
+                                match qrcode::generate_qr_code(code) {
+                                    Ok(qr) => {
+                                        println!();
+                                        println!("{}", qrcode::render_to_terminal(&qr));
+                                        println!();
+                                    }
+                                    Err(e) => {
+                                        debug!("{:#?}", e);
+                                        return Err(e);
+                                    }
+                                }
+                                info!(
+                                    "Please scan the latest QR code in your BoursoBank app to validate the login request."
+                                );
+                                wait_time += wait_interval;
+                                tokio::time::sleep(std::time::Duration::from_secs(wait_interval))
+                                    .await;
+                            }
+                            _ => {
+                                debug!("{:#?}", e);
+                                return Err(e);
+                            }
+                        },
                     }
-
-                    if wait_time >= max_wait_time {
-                        return Err(anyhow::anyhow!(
-                            "MFA validation timed out after {} seconds",
-                            max_wait_time
-                        ));
-                    }
-
-                    wait_time += wait_interval;
-                    tokio::time::sleep(std::time::Duration::from_secs(wait_interval)).await;
                 }
 
                 info!("MFA successful ✅");
