@@ -4,6 +4,7 @@ use std::fmt;
 pub enum ClientError {
     InvalidCredentials,
     MfaRequired,
+    QRCodeRequired(String),
     InvalidMfa,
 }
 
@@ -12,6 +13,7 @@ impl fmt::Display for ClientError {
         match self {
             ClientError::InvalidCredentials => write!(f, "Invalid credentials"),
             ClientError::MfaRequired => write!(f, "MFA required"),
+            ClientError::QRCodeRequired(msg) => write!(f, "{}", msg),
             ClientError::InvalidMfa => write!(f, "Invalid MFA"),
         }
     }

@@ -1,7 +1,6 @@
 pub mod account;
 pub mod config;
 pub mod error;
-pub mod qrcode;
 pub mod trade;
 pub mod transfer;
 pub mod virtual_pad;
@@ -516,17 +515,9 @@ impl BoursoWebClient {
             debug!("⏳ MFA not yet validated");
 
             if json_body["qrcode"].is_string() {
-                match qrcode::generate_qr_code(json_body["qrcode"].as_str().unwrap()) {
-                    Ok(qr) => {
-                        println!();
-                        println!("{}", qrcode::render_to_terminal(&qr));
-                        println!();
-                    }
-                    Err(e) => bail!("Could not render the QR code {}", e),
-                }
-                info!(
-                    "Please scan the latest QR code in your BoursoBank app to validate the login request."
-                );
+                bail!(ClientError::QRCodeRequired(
+                    json_body["qrcode"].as_str().unwrap().to_string()
+                ));
             }
 
             Ok(false)
