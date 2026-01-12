@@ -288,6 +288,40 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                         _ => unreachable!(),
                     }
                 }
+                Some(("position", symbols_matches)) => {
+                    match symbols_matches.subcommand() {
+                        Some(("list", list_matches)) => {
+                            let account_id = list_matches
+                                .get_one::<String>("account")
+                                .map(|s| s.as_str())
+                                .unwrap();
+
+                            let account = accounts
+                                .iter()
+                                .find(|a| a.id == account_id)
+                                .context("Account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?;
+
+                            let summary = web_client.get_trading_summary(account.clone()).await?;
+
+                            info!("Found {} positions", summary.len());
+                            for item in summary {
+                                if let Some(positions) = item.positions {
+                                    for position in positions {
+                                        info!(
+                                            "Symbol: {} ({}), Quantity: {}, Amount: {} {}",
+                                            position.label,
+                                            position.symbol,
+                                            position.quantity.value,
+                                            position.amount.value,
+                                            position.amount.currency.as_deref().unwrap_or("")
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             }
         }
