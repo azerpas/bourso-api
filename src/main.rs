@@ -168,6 +168,11 @@ async fn main() -> Result<()> {
                 )
         )
         .subcommand(
+            Command::new("positions")
+                .about("Get trading positions for a trading account")
+                .arg(account_arg.clone())
+        )
+        .subcommand(
             Command::new("transfer")
                 .about("Make a transfer between your accounts")
                 .arg(account_arg.clone())

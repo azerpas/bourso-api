@@ -120,6 +120,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         | Some(("transactions", _))
         | Some(("balance", _))
         | Some(("trade", _))
+        | Some(("positions", _))
         | Some(("transfer", _)) => (),
         _ => unreachable!(),
     }
@@ -290,6 +291,25 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                 }
                 _ => unreachable!(),
             }
+        }
+
+        Some(("positions", positions_matches)) => {
+            accounts = web_client.get_accounts(Some(AccountKind::Trading)).await?;
+
+            let account_id = positions_matches
+                .get_one::<String>("account")
+                .map(|s| s.as_str())
+                .unwrap();
+
+            // Get account from previously fetched accounts
+            let account = accounts
+                .iter()
+                .find(|a| a.id == account_id)
+                .context("Account not found. Are you sure you have access to it? Run `bourso accounts --trading` to list your trading accounts")?;
+
+            let positions = web_client.get_trading_summary(account.clone()).await?;
+            let json = serde_json::to_string_pretty(&positions)?;
+            println!("{}", json);
         }
 
         Some(("transfer", transfer_matches)) => {

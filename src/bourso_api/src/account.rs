@@ -8,6 +8,7 @@ pub enum AccountKind {
     #[default]
     Trading,
     Loans,
+    LifeInsurance,
 }
 
 /// A bank account

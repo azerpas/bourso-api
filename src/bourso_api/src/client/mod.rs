@@ -266,7 +266,250 @@ impl BoursoWebClient {
             .send()
             .await?;
 
-        if res.status() != 302 {
+        debug!("POST response status: {}", res.status());
+        
+        if res.status() == 302 {
+            // Check if redirecting - can be cross-domain
+            if let Some(location) = res.headers().get("location") {
+                if let Ok(location_str) = location.to_str() {
+                    debug!("Redirect location: {}", location_str);
+                    
+                    // Follow cross-domain redirect if needed
+                    if location_str.contains("x-domain-authentification") || location_str.contains("boursorama.com") {
+                        debug!("Following cross-domain redirect");
+                        let redirect_res = self
+                            .client
+                            .get(location_str)
+                            .headers(self.get_headers())
+                            .send()
+                            .await?;
+                        debug!("Cross-domain redirect response status: {}", redirect_res.status());
+                        
+                        // Handle another potential 302 from cross-domain redirect
+                        if redirect_res.status() == 302 {
+                            if let Some(next_location) = redirect_res.headers().get("location") {
+                                if let Ok(next_location_str) = next_location.to_str() {
+                                    debug!("Following chained redirect: {}", next_location_str);
+                                    let chained_res = self
+                                        .client
+                                        .get(next_location_str)
+                                        .headers(self.get_headers())
+                                        .send()
+                                        .await?;
+                                    
+                                    // Check if this leads to identity selection
+                                    if chained_res.status() == 302 {
+                                        if let Some(identity_location) = chained_res.headers().get("location") {
+                                            if let Ok(identity_location_str) = identity_location.to_str() {
+                                                if identity_location_str.contains("lister-identites") {
+                                                    debug!("Detected identity selection required, fetching list");
+                                                    let identity_res = self
+                                                        .client
+                                                        .get(format!("{BASE_URL}/connexion/lister-identites"))
+                                                        .headers(self.get_headers())
+                                                        .send()
+                                                        .await?;
+                                                    
+                                                    let identity_html = identity_res.text().await?;
+                                                    debug!("Identity page HTML length: {}", identity_html.len());
+                                                    
+                                                    // Look for the identity change link pattern: href="/connexion/changer-identite/{ID}"
+                                                    let change_identity_pattern = Regex::new(
+                                                        r#"href="/connexion/changer-identite/([a-fA-F0-9]+)"#
+                                                    ).expect("Failed to compile change identity pattern");
+                                                    
+                                                    let mut found_identity = false;
+                                                    if let Some(caps) = change_identity_pattern.captures(&identity_html) {
+                                                        if let Some(id_match) = caps.get(1) {
+                                                            let identity_id = id_match.as_str();
+                                                            info!("Found identity ID from changer-identite link: {}", identity_id);
+                                                            
+                                                            // Try GET request to the identity change endpoint
+                                                            let change_url = format!("{BASE_URL}/connexion/changer-identite/{}", identity_id);
+                                                            debug!("Following identity change link: {}", change_url);
+                                                            
+                                                            match self
+                                                                .client
+                                                                .get(&change_url)
+                                                                .headers(self.get_headers())
+                                                                .send()
+                                                                .await
+                                                            {
+                                                                Ok(sel_res) => {
+                                                                    debug!("Identity change response status: {}", sel_res.status());
+                                                                    
+                                                                    if sel_res.status() == 302 {
+                                                                        // Follow redirect after identity selection
+                                                                        if let Some(redir_loc) = sel_res.headers().get("location") {
+                                                                            if let Ok(redir_str) = redir_loc.to_str() {
+                                                                                debug!("Following post-selection redirect: {}", redir_str);
+                                                                                
+                                                                                // Convert relative URL to absolute if needed
+                                                                                let full_redirect_url = if redir_str.starts_with("http") {
+                                                                                    redir_str.to_string()
+                                                                                } else {
+                                                                                    format!("{BASE_URL}{}", redir_str)
+                                                                                };
+                                                                                
+                                                                                match self
+                                                                                    .client
+                                                                                    .get(&full_redirect_url)
+                                                                                    .headers(self.get_headers())
+                                                                                    .send()
+                                                                                    .await
+                                                                                {
+                                                                                    Ok(redirect_res) => {
+                                                                                        debug!("Post-selection redirect response: {}", redirect_res.status());
+                                                                                        info!("Successfully selected identity and followed redirect");
+                                                                                        found_identity = true;
+                                                                                    }
+                                                                                    Err(e) => {
+                                                                                        debug!("Post-selection redirect failed: {}", e);
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    } else if sel_res.status() == 200 {
+                                                                        info!("Successfully selected identity (200 OK)");
+                                                                        found_identity = true;
+                                                                    }
+                                                                }
+                                                                Err(e) => {
+                                                                    debug!("Identity change request failed: {}", e);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // If no identity found in HTML, try API endpoints
+                                                    if !found_identity {
+                                                        debug!("No identity found in HTML, trying API endpoints");
+                                                        
+                                                        // Try to get list of identities from API
+                                                        let api_endpoints = vec![
+                                                            format!("{BASE_URL}/api/identities"),
+                                                            format!("{BASE_URL}/api/identity/list"),
+                                                            format!("{BASE_URL}/api/user/identities"),
+                                                        ];
+                                                        
+                                                        for api_endpoint in api_endpoints {
+                                                            debug!("Trying API endpoint: {}", api_endpoint);
+                                                            match self
+                                                                .client
+                                                                .get(&api_endpoint)
+                                                                .headers(self.get_headers())
+                                                                .send()
+                                                                .await
+                                                            {
+                                                                Ok(api_res) => {
+                                                                    if api_res.status() == 200 {
+                                                                        match api_res.text().await {
+                                                                            Ok(body) => {
+                                                                                debug!("API response: {}", &body[..std::cmp::min(200, body.len())]);
+                                                                                
+                                                                                // Try to parse JSON for identity IDs
+                                                                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                                                                                    if let Some(identities) = json.get("identities").or(json.get("data")) {
+                                                                                        if let Some(arr) = identities.as_array() {
+                                                                                            if !arr.is_empty() {
+                                                                                                if let Some(first_id) = arr[0].get("id").or(arr[0].get("identityId")) {
+                                                                                                    if let Some(id_str) = first_id.as_str() {
+                                                                                                        info!("Found identity from API: {}", id_str);
+                                                                                                        
+                                                                                                        // Try to select this identity
+                                                                                                        let select_endpoints = vec![
+                                                                                                            format!("{BASE_URL}/api/identity/select"),
+                                                                                                            format!("{BASE_URL}/connexion/select-identity"),
+                                                                                                        ];
+                                                                                                        
+                                                                                                        for select_ep in select_endpoints {
+                                                                                                            match self
+                                                                                                                .client
+                                                                                                                .post(&select_ep)
+                                                                                                                .form(&[("identity", id_str.to_string()), ("identityId", id_str.to_string())])
+                                                                                                                .headers(self.get_headers())
+                                                                                                                .send()
+                                                                                                                .await
+                                                                                            {
+                                                                                                                Ok(sel_res) => {
+                                                                                                                    debug!("Selection via API response: {}", sel_res.status());
+                                                                                                                    if sel_res.status() == 200 || sel_res.status() == 302 {
+                                                                                                                        info!("Successfully selected identity via API");
+                                                                                                                        found_identity = true;
+                                                                                                                        break;
+                                                                                                                    }
+                                                                                                                }
+                                                                                                                Err(e) => debug!("API selection failed: {}", e),
+                                                                                                            }
+                                                                                                        }
+                                                                                                        if found_identity {
+                                                                                                            break;
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            Err(e) => debug!("Failed to read API response: {}", e),
+                                                                        }
+                                                                    }
+                                                                }
+                                                                Err(e) => debug!("API request failed: {}", e),
+                                                            }
+                                                        }
+                                                        
+                                                        // Fallback: try POST with empty body to old endpoints
+                                                        if !found_identity {
+                                                            debug!("No identity found via API, trying POST endpoints");
+                                                            let endpoints = vec![
+                                                                format!("{BASE_URL}/connexion/select-identity"),
+                                                                format!("{BASE_URL}/connexion/selectIdentity"),
+                                                                format!("{BASE_URL}/connexion/identity/select"),
+                                                            ];
+                                                            
+                                                            for endpoint in endpoints {
+                                                                debug!("Trying POST to {}", endpoint);
+                                                                match self
+                                                                    .client
+                                                                    .post(&endpoint)
+                                                                    .body("")
+                                                                    .headers(self.get_headers())
+                                                                    .send()
+                                                                    .await
+                                                                {
+                                                                    Ok(sel_res) => {
+                                                                        debug!("Default POST response: {}", sel_res.status());
+                                                                        if sel_res.status() == 200 || sel_res.status() == 302 {
+                                                                            info!("Successfully selected default identity");
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                    Err(e) => {
+                                                                        debug!("Default POST failed: {}", e);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if location_str.contains("securisation") {
+                        bail!(ClientError::MfaRequired);
+                    }
+                } else {
+                    debug!("Could not convert location header to string");
+                }
+            }
+        } else if res.status() != 200 {
             let status = res.status();
             let text = res.text().await?;
             if text.contains("Identifiant ou mot de passe invalide")

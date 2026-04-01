@@ -1,7 +1,7 @@
 use crate::{
     account::{Account, AccountKind},
     constants::{
-        ACCOUNT_PATTERN, BANKING_PATTERN, BASE_URL, LOANS_PATTERN, SAVINGS_PATTERN, TRADING_PATTERN,
+        ACCOUNT_PATTERN, BANKING_PATTERN, LIFEINSURANCE_PATTERN, BASE_URL, LOANS_PATTERN, SAVINGS_PATTERN, TRADING_PATTERN,
     },
 };
 
@@ -38,12 +38,14 @@ impl BoursoWebClient {
             Some(AccountKind::Banking) => extract_accounts(&res, AccountKind::Banking)?,
             Some(AccountKind::Trading) => extract_accounts(&res, AccountKind::Trading)?,
             Some(AccountKind::Loans) => extract_accounts(&res, AccountKind::Loans)?,
+            Some(AccountKind::LifeInsurance) => extract_accounts(&res, AccountKind::LifeInsurance)?,
             // all accounts
             _ => [
                 extract_accounts(&res, AccountKind::Savings).unwrap_or(Vec::new()),
                 extract_accounts(&res, AccountKind::Banking).unwrap_or(Vec::new()),
                 extract_accounts(&res, AccountKind::Trading).unwrap_or(Vec::new()),
                 extract_accounts(&res, AccountKind::Loans).unwrap_or(Vec::new()),
+                extract_accounts(&res, AccountKind::LifeInsurance).unwrap_or(Vec::new()),
             ]
             .concat(),
         };
@@ -58,6 +60,7 @@ fn extract_accounts(res: &str, kind: AccountKind) -> Result<Vec<Account>> {
         AccountKind::Banking => BANKING_PATTERN,
         AccountKind::Trading => TRADING_PATTERN,
         AccountKind::Loans => LOANS_PATTERN,
+        AccountKind::LifeInsurance => LIFEINSURANCE_PATTERN,
     })?;
     let accounts_ul = regex
         .captures(&res)

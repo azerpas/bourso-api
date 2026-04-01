@@ -48,8 +48,8 @@ fn get_trading_base_url(config: &Config) -> Result<String> {
 }
 
 fn get_trading_summary_url(config: &Config, account: Account) -> Result<String> {
-    if account.kind != AccountKind::Trading {
-        return Err(anyhow::anyhow!("Account is not a trading account"));
+    if account.kind != AccountKind::Trading && account.kind != AccountKind::LifeInsurance {
+        return Err(anyhow::anyhow!("Account does not support positions"));
     }
 
     Ok(
