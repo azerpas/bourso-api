@@ -2,6 +2,7 @@ pub mod account;
 pub mod config;
 pub mod error;
 pub mod trade;
+pub mod transaction;
 pub mod transfer;
 pub mod virtual_pad;
 
