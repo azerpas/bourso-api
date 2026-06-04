@@ -1,0 +1,49 @@
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+    - id: upstream
+      name: Get upstream repo URL
+      uses: actions/github-script@v7
+      with:
+        script: "const repo = await github.rest.repos.get({\n  owner: context.repo.owner,\n\
+          \  repo: context.repo.repo,\n});\nif (!repo.data.fork || !repo.data.parent)\
+          \ {\n  core.setFailed('This repository is not a fork');\n  return;\n}\n\
+          const parent = repo.data.parent;\ncore.setOutput('clone_url', parent.clone_url);\n\
+          core.setOutput('default_branch', parent.default_branch);\ncore.info(`Upstream:\
+          \ ${parent.full_name}, branch: ${parent.default_branch}`);\n"
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Rebase over upstream
+      run: 'git config user.name "github-actions[bot]"
+
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+
+        upstream_branch="${{ steps.upstream.outputs.default_branch }}"
+
+        our_branch="${{ github.event.repository.default_branch }}"
+
+
+        git remote add upstream "${{ steps.upstream.outputs.clone_url }}"
+
+        git fetch upstream "$upstream_branch"
+
+
+        git checkout "$our_branch"
+
+        git rebase "upstream/$upstream_branch"
+
+        git push --force-with-lease origin "$our_branch"
+
+        '
+name: Sync Fork (Rebase)
+'on':
+  schedule:
+  - cron: 0 4 * * *
+  workflow_dispatch: {}
+permissions:
+  contents: write
