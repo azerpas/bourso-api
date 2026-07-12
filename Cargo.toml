@@ -11,7 +11,7 @@ bourso_api         = { path = "./src/bourso_api" }
 tokio              = { version = "1.33.0", features = ["full"] }
 anyhow             = { version = "1.0.75" }
 clap               = { version = "4.4.6" }
-rpassword          = { version = "7.2.0" }
+rpassword          = { version = "7.5.0" }
 directories        = { version = "5.0.1" }
 serde              = { version = "1.0.189", features = ["derive"] }
 serde_json         = { version = "1.0.107" }
