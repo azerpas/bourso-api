@@ -15,7 +15,7 @@ pub enum TransferProgress {
     SettingDebitAccount,
     SettingCreditAccount,
     SettingAmount,
-    SubmittingStep7,
+    SubmittingStep5,
     SettingReason,
     ConfirmingTransfer,
     Completed,
@@ -31,7 +31,7 @@ impl TransferProgress {
             TransferProgress::SettingDebitAccount => 4,
             TransferProgress::SettingCreditAccount => 5,
             TransferProgress::SettingAmount => 6,
-            TransferProgress::SubmittingStep7 => 7,
+            TransferProgress::SubmittingStep5 => 7,
             TransferProgress::SettingReason => 8,
             TransferProgress::ConfirmingTransfer => 9,
             TransferProgress::Completed => 10,
@@ -51,7 +51,7 @@ impl TransferProgress {
             TransferProgress::SettingDebitAccount => "Setting debit account",
             TransferProgress::SettingCreditAccount => "Setting credit account",
             TransferProgress::SettingAmount => "Setting transfer amount",
-            TransferProgress::SubmittingStep7 => "Submitting intermediate step",
+            TransferProgress::SubmittingStep5 => "Submitting intermediate step",
             TransferProgress::SettingReason => "Setting transfer reason",
             TransferProgress::ConfirmingTransfer => "Confirming transfer",
             TransferProgress::Completed => "Transfer completed",
@@ -185,7 +185,7 @@ impl BoursoWebClient {
         Ok(())
     }
 
-    /// Set the transfer amount (step 6)
+    /// Set the transfer amount (step 4)
     #[cfg(not(tarpaulin_include))]
     async fn set_transfer_amount(
         &self,
@@ -199,13 +199,13 @@ impl BoursoWebClient {
                 "flow_ImmediateCashTransfer_instance",
                 flow_instance.to_string(),
             )
-            .text("flow_ImmediateCashTransfer_step", "5".to_string())
+            .text("flow_ImmediateCashTransfer_step", "3".to_string())
             .text("Amount[amount]", format!("{:.2}", amount).replace('.', ","))
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("submit", "".to_string());
 
         let url = format!(
-            "{}/compte/cav/{}/virements/immediat/nouveau/{}/6",
+            "{}/compte/cav/{}/virements/immediat/nouveau/{}/4",
             BASE_URL, from_account, transfer_id
         );
 
@@ -219,9 +219,9 @@ impl BoursoWebClient {
         Ok(())
     }
 
-    /// Submit step 7
+    /// Submit step 5
     #[cfg(not(tarpaulin_include))]
-    async fn submit_step_7(
+    async fn submit_step_5(
         &self,
         from_account: &str,
         transfer_id: &str,
@@ -229,17 +229,18 @@ impl BoursoWebClient {
     ) -> Result<()> {
         let data = reqwest::multipart::Form::new()
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
+            .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text(
                 "flow_ImmediateCashTransfer_instance",
                 flow_instance.to_string(),
             )
-            .text("flow_ImmediateCashTransfer_step", "6".to_string())
+            .text("flow_ImmediateCashTransfer_step", "4".to_string())
             .text("submit", "".to_string());
 
         let res = self
             .client
             .post(format!(
-                "{}/compte/cav/{}/virements/immediat/nouveau/{}/7",
+                "{}/compte/cav/{}/virements/immediat/nouveau/{}/5",
                 BASE_URL, from_account, transfer_id
             ))
             .multipart(data)
@@ -248,13 +249,13 @@ impl BoursoWebClient {
 
         if res.status() != 200 {
             debug!("Submit transfer response: {:?}", res);
-            bail!(TransferError::Step7Failed);
+            bail!(TransferError::Step5Failed);
         }
 
         Ok(())
     }
 
-    /// Set the transfer reason (step 10)
+    /// Set the transfer reason (step 8)
     #[cfg(not(tarpaulin_include))]
     async fn set_transfer_reason(
         &self,
@@ -268,7 +269,7 @@ impl BoursoWebClient {
                 "flow_ImmediateCashTransfer_instance",
                 flow_instance.to_string(),
             )
-            .text("flow_ImmediateCashTransfer_step", "9".to_string())
+            .text("flow_ImmediateCashTransfer_step", "7".to_string())
             .text("Characteristics[label]", transfer_reason.to_string())
             .text("Characteristics[schedulingType]", "1".to_string()) // 1 = unique
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
@@ -276,7 +277,7 @@ impl BoursoWebClient {
             .text("submit", "".to_string());
 
         let url = format!(
-            "{}/compte/cav/{}/virements/immediat/nouveau/{}/10",
+            "{}/compte/cav/{}/virements/immediat/nouveau/{}/8",
             BASE_URL, from_account, transfer_id
         );
 
@@ -290,7 +291,7 @@ impl BoursoWebClient {
         Ok(())
     }
 
-    /// Confirm and finalize the transfer (step 12)
+    /// Confirm and finalize the transfer (step 10)
     #[cfg(not(tarpaulin_include))]
     async fn confirm_transfer(
         &self,
@@ -303,7 +304,7 @@ impl BoursoWebClient {
                 "flow_ImmediateCashTransfer_instance",
                 flow_instance.to_string(),
             )
-            .text("flow_ImmediateCashTransfer_step", "11".to_string())
+            .text("flow_ImmediateCashTransfer_step", "9".to_string())
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("flow_ImmediateCashTransfer_transition", "".to_string())
             .text("submit", "".to_string());
@@ -311,7 +312,7 @@ impl BoursoWebClient {
         let res = self
             .client
             .post(format!(
-                "{}/compte/cav/{}/virements/immediat/nouveau/{}/12",
+                "{}/compte/cav/{}/virements/immediat/nouveau/{}/10",
                 BASE_URL, from_account, transfer_id
             ))
             .multipart(data)
@@ -438,9 +439,9 @@ impl BoursoWebClient {
                 return;
             }
 
-            // Step 7: Submit
-            yield Ok(TransferProgress::SubmittingStep7);
-            if let Err(e) = self.submit_step_7(&from_account_id, &transfer_id, &flow_instance)
+            // Step 5: Submit
+            yield Ok(TransferProgress::SubmittingStep5);
+            if let Err(e) = self.submit_step_5(&from_account_id, &transfer_id, &flow_instance)
                 .await {
                 yield Err(e);
                 return;
