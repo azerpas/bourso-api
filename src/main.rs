@@ -2,8 +2,8 @@ use anyhow::Result;
 use bourso_api::client::trade::order::OrderSide;
 use bourso_cli::{settings::init_logger, validate::validate_account_id};
 use clap::{
-    builder::{PossibleValue, ValueParser},
     Arg, Command,
+    builder::{PossibleValue, ValueParser},
 };
 
 #[tokio::main]
@@ -202,6 +202,33 @@ async fn main() -> Result<()> {
                                 .short('o')
                                 .help("Output file path (defaults to stdout)")
                                 .required(false)
+                        )
+                )
+                .subcommand(
+                    Command::new("recurring")
+                        .about("List subscriptions and other repeating charges")
+                        .arg(account_arg.clone())
+                        .arg(
+                            Arg::new("months")
+                                .long("months")
+                                .help("How many months back to look for repeats")
+                                .default_value("6")
+                                .value_parser(clap::value_parser!(u32).range(1..))
+                        )
+                        .arg(
+                            Arg::new("min-occurrences")
+                                .long("min-occurrences")
+                                .help("How many charges a merchant needs before it counts as recurring")
+                                .default_value("3")
+                                .value_parser(clap::value_parser!(usize))
+                        )
+                        .arg(
+                            Arg::new("format")
+                                .long("format")
+                                .short('f')
+                                .help("Output format (table or json)")
+                                .default_value("table")
+                                .value_parser(["table", "json"])
                         )
                 )
         )

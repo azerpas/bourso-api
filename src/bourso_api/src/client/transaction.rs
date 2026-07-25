@@ -4,7 +4,10 @@ use crate::constants::BASE_URL;
 use super::BoursoWebClient;
 
 use anyhow::{Context, Result};
+use chrono::NaiveDate;
 use regex::Regex;
+use serde::Serialize;
+use std::collections::{BTreeMap, HashSet};
 use tracing::debug;
 
 impl BoursoWebClient {
@@ -111,16 +114,15 @@ impl BoursoWebClient {
 ///
 /// Handles thousands separators (spaces and non-breaking spaces) and
 /// comma decimal separators as used in BoursoBank CSV exports.
-fn parse_amount(s: &str) -> f64 {
+fn parse_amount(s: &str) -> Result<f64> {
     let cleaned = s
         .trim()
         .replace('\u{a0}', "")
         .replace(' ', "")
         .replace(',', ".");
-    if cleaned.is_empty() {
-        return 0.0;
-    }
-    cleaned.parse::<f64>().unwrap_or(0.0)
+    cleaned
+        .parse::<f64>()
+        .with_context(|| format!("Unparseable amount {s:?} in export"))
 }
 
 /// Extract transactions from a BoursoBank CSV export string.
@@ -139,25 +141,190 @@ fn extract_transactions(content: &str) -> Result<Vec<Transaction>> {
         .flexible(true)
         .from_reader(content.as_bytes());
 
+    // Column positions shift between exports: BoursoBank only emits `tags` when some
+    // transaction in the range is tagged, which slides every later column right by one.
+    // Reading by position silently mis-parsed amounts, so fields are resolved by name.
+    let headers = reader
+        .headers()
+        .context("Export has no CSV header")?
+        .clone();
+    let column = |name: &str| headers.iter().position(|header| header.trim() == name);
+
+    let date_op = column("dateOp").context("Export has no `dateOp` column")?;
+    let label = column("label").context("Export has no `label` column")?;
+    let amount = column("amount").context("Export has no `amount` column")?;
+    // The remaining columns are presentational and genuinely absent from some exports.
+    let date_val = column("dateVal");
+    let category = column("category");
+    let category_parent = column("categoryParent");
+    let supplier_found = column("suggestedLabel");
+    let comment = column("comment");
+    let account_num = column("accountNum");
+    let account_label = column("accountLabel");
+    let account_balance = column("accountbalance");
+
     reader
         .records()
         .map(|result| {
             let record = result.context("Failed to parse CSV record")?;
+            let field = |index: Option<usize>| {
+                index
+                    .and_then(|index| record.get(index))
+                    .unwrap_or_default()
+                    .to_string()
+            };
             Ok(Transaction {
-                date_op: record.get(0).unwrap_or("").to_string(),
-                date_val: record.get(1).unwrap_or("").to_string(),
-                label: record.get(2).unwrap_or("").to_string(),
-                category: record.get(3).unwrap_or("").to_string(),
-                category_parent: record.get(4).unwrap_or("").to_string(),
-                supplier_found: record.get(5).unwrap_or("").to_string(),
-                amount: parse_amount(record.get(6).unwrap_or("")),
-                comment: record.get(7).unwrap_or("").to_string(),
-                account_num: record.get(8).unwrap_or("").to_string(),
-                account_label: record.get(9).unwrap_or("").to_string(),
-                account_balance: parse_amount(record.get(10).unwrap_or("")),
+                date_op: field(Some(date_op)),
+                date_val: field(date_val),
+                label: field(Some(label)),
+                category: field(category),
+                category_parent: field(category_parent),
+                supplier_found: field(supplier_found),
+                amount: parse_amount(
+                    record
+                        .get(amount)
+                        .context("CSV record is missing its amount field")?,
+                )?,
+                comment: field(comment),
+                account_num: field(account_num),
+                account_label: field(account_label),
+                account_balance: match account_balance.and_then(|index| record.get(index)) {
+                    // Absent on the running-balance-less exports; 0.0 is not a real balance.
+                    None | Some("") => 0.0,
+                    Some(balance) => parse_amount(balance)?,
+                },
             })
         })
         .collect()
+}
+
+/// A charge that repeats: same merchant, on a steady cadence.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct Recurring {
+    pub merchant: String,
+    pub occurrences: usize,
+    /// Distinct calendar months in which the merchant charged.
+    pub months: usize,
+    /// Median gap between consecutive charges, in days.
+    pub every_days: i64,
+    pub amount_min: f64,
+    pub amount_max: f64,
+    pub total: f64,
+    pub last: String,
+}
+
+impl Recurring {
+    pub fn is_fixed(&self) -> bool {
+        self.amount_min == self.amount_max
+    }
+}
+
+/// Find charges that repeat, over transactions already filtered to a date range.
+///
+/// Two kinds qualify: an identical amount billed repeatedly (a plain subscription),
+/// and a merchant billing a varying amount but no more than twice a month (metered
+/// services). The latter cap is what keeps everyday spending out — groceries hit the
+/// same merchant far more often than any subscription bills.
+pub fn recurring(transactions: &[Transaction], min_occurrences: usize) -> Result<Vec<Recurring>> {
+    assert!(min_occurrences > 0, "min_occurrences must be positive");
+
+    let spends: Vec<&Transaction> = transactions.iter().filter(|tx| tx.amount < 0.0).collect();
+
+    let mut by_fixed_amount: BTreeMap<(String, i64), Vec<&Transaction>> = BTreeMap::new();
+    for tx in &spends {
+        let cents = (tx.amount * 100.0).round() as i64;
+        by_fixed_amount
+            .entry((merchant(tx), cents))
+            .or_default()
+            .push(tx);
+    }
+
+    let mut found = Vec::new();
+    let mut claimed: HashSet<(String, i64)> = HashSet::new();
+    for ((name, cents), group) in &by_fixed_amount {
+        let summary = summarize(name, group)?;
+        if qualifies(&summary, min_occurrences) {
+            claimed.insert((name.clone(), *cents));
+            found.push(summary);
+        }
+    }
+
+    let mut by_merchant: BTreeMap<String, Vec<&Transaction>> = BTreeMap::new();
+    for tx in &spends {
+        let cents = (tx.amount * 100.0).round() as i64;
+        let name = merchant(tx);
+        if claimed.contains(&(name.clone(), cents)) {
+            continue;
+        }
+        by_merchant.entry(name).or_default().push(tx);
+    }
+
+    for (name, group) in &by_merchant {
+        let summary = summarize(name, group)?;
+        if qualifies(&summary, min_occurrences) {
+            found.push(summary);
+        }
+    }
+
+    found.sort_by(|a, b| b.total.abs().total_cmp(&a.total.abs()));
+    Ok(found)
+}
+
+/// Billing at most twice a month is what separates a subscription from a habit:
+/// a merchant you simply shop at turns up far more often than any plan bills.
+fn qualifies(summary: &Recurring, min_occurrences: usize) -> bool {
+    summary.occurrences >= min_occurrences
+        && summary.months >= min_occurrences
+        && summary.occurrences <= summary.months * 2
+}
+
+/// BoursoBank's own supplier guess collapses "CARTE 20/07/26 LIDL 4147 CB*5287"
+/// down to "Lidl", which groups far better than the raw label ever could.
+fn merchant(tx: &Transaction) -> String {
+    let name = if tx.supplier_found.trim().is_empty() {
+        tx.label.trim()
+    } else {
+        tx.supplier_found.trim()
+    };
+    name.to_uppercase()
+}
+
+fn summarize(name: &str, group: &[&Transaction]) -> Result<Recurring> {
+    let mut dates: Vec<NaiveDate> = group
+        .iter()
+        .map(|tx| {
+            NaiveDate::parse_from_str(&tx.date_op, "%Y-%m-%d")
+                .with_context(|| format!("Unparseable operation date {:?}", tx.date_op))
+        })
+        .collect::<Result<_>>()?;
+    dates.sort_unstable();
+
+    let mut gaps: Vec<i64> = dates
+        .windows(2)
+        .map(|pair| (pair[1] - pair[0]).num_days())
+        .collect();
+    gaps.sort_unstable();
+
+    let amounts: Vec<f64> = group.iter().map(|tx| tx.amount.abs()).collect();
+    let months: HashSet<(i32, u32)> = dates
+        .iter()
+        .map(|date| (chrono::Datelike::year(date), chrono::Datelike::month(date)))
+        .collect();
+
+    Ok(Recurring {
+        merchant: name.to_string(),
+        occurrences: group.len(),
+        months: months.len(),
+        every_days: gaps.get(gaps.len() / 2).copied().unwrap_or(0),
+        amount_min: amounts.iter().copied().fold(f64::INFINITY, f64::min),
+        amount_max: amounts.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        total: amounts.iter().sum(),
+        last: dates
+            .last()
+            .expect("group is non-empty by construction")
+            .format("%Y-%m-%d")
+            .to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -166,32 +333,50 @@ mod tests {
 
     #[test]
     fn test_parse_amount() {
-        assert_eq!(parse_amount("-568,13"), -568.13);
-        assert_eq!(parse_amount("1 718,70"), 1718.70);
-        assert_eq!(parse_amount("-8,99"), -8.99);
-        assert_eq!(parse_amount("37.29"), 37.29);
-        assert_eq!(parse_amount(""), 0.0);
-        assert_eq!(parse_amount("  "), 0.0);
+        assert_eq!(parse_amount("-568,13").unwrap(), -568.13);
+        assert_eq!(parse_amount("1 718,70").unwrap(), 1718.70);
+        assert_eq!(parse_amount("-8,99").unwrap(), -8.99);
+        assert_eq!(parse_amount("37.29").unwrap(), 37.29);
+        assert!(parse_amount("").is_err());
+        assert!(parse_amount("n/a").is_err());
     }
 
     #[test]
     fn test_extract_transactions() {
         let transactions = extract_transactions(TRANSACTIONS_CSV).unwrap();
         assert_eq!(transactions.len(), 3);
-        assert_eq!(transactions[0].date_op, "2026-02-09");
-        assert_eq!(transactions[0].label, "VIR SEPA Loyer Villard");
-        assert_eq!(transactions[0].amount, -568.13);
-        assert_eq!(transactions[0].account_balance, 37.29);
-        assert_eq!(transactions[0].category, "Virements émis");
-        assert_eq!(transactions[1].date_op, "2026-02-06");
-        assert_eq!(
-            transactions[1].label,
-            "CARTE 05/02/26 AMZN Mktp FR*308J CB*7686"
-        );
-        assert_eq!(transactions[1].amount, -8.99);
-        assert_eq!(transactions[2].label, "VIR SEPA FRANCE TRAVAIL");
-        assert_eq!(transactions[2].amount, 1718.70);
-        assert_eq!(transactions[2].account_balance, 629.41);
+        assert_eq!(transactions[0].date_op, "2026-07-24");
+        assert_eq!(transactions[0].label, "VIR INST MARTIROS SHAHBAZYAN");
+        assert_eq!(transactions[0].amount, 21.81);
+        assert_eq!(transactions[0].account_balance, 0.05);
+        assert_eq!(transactions[0].category, "Virements reçus");
+        assert_eq!(transactions[1].supplier_found, "Cloudflare");
+        assert_eq!(transactions[1].amount, -3.94);
+        assert_eq!(transactions[2].supplier_found, "Lidl");
+        assert_eq!(transactions[2].amount, -13.69);
+    }
+
+    /// BoursoBank emits `tags` only when a transaction in the range carries one,
+    /// sliding every later column right. Both shapes must parse identically.
+    #[test]
+    fn test_extract_transactions_ignores_column_shift() {
+        let without_tags = extract_transactions(TRANSACTIONS_CSV).unwrap();
+        let with_tags = extract_transactions(TRANSACTIONS_CSV_WITH_TAGS).unwrap();
+
+        let amounts = |txs: &[Transaction]| txs.iter().map(|tx| tx.amount).collect::<Vec<_>>();
+        let suppliers = |txs: &[Transaction]| {
+            txs.iter()
+                .map(|tx| tx.supplier_found.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(amounts(&without_tags), amounts(&with_tags));
+        assert_eq!(suppliers(&without_tags), suppliers(&with_tags));
+    }
+
+    #[test]
+    fn test_extract_transactions_rejects_missing_amount_column() {
+        let csv = "dateOp;label;comment\n2026-07-24;VIR;\n";
+        assert!(extract_transactions(csv).is_err());
     }
 
     #[test]
@@ -203,9 +388,72 @@ mod tests {
         assert!(result.is_err() || result.unwrap().is_empty());
     }
 
-    pub const TRANSACTIONS_CSV: &str = r#"dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance
-2026-02-09;2026-02-09;"VIR SEPA Loyer Villard";"Virements émis";"Virements émis";"virement loyer villard";-568,13;;00040613484;BoursoBank;37.29
-2026-02-06;2026-02-06;"CARTE 05/02/26 AMZN Mktp FR*308J CB*7686";"Livres, CD/DVD, bijoux, jouets…";"Vie quotidienne";amazon;-8,99;;00040613484;BoursoBank;605.42
-2026-02-03;2026-02-03;"VIR SEPA FRANCE TRAVAIL";"Virements reçus";"Virements reçus";"virement france travail";1 718,70;;00040613484;BoursoBank;629.41
+    #[test]
+    fn test_recurring_separates_subscriptions_from_shopping() {
+        let tx = |date: &str, supplier: &str, amount: f64| Transaction {
+            date_op: date.to_string(),
+            supplier_found: supplier.to_string(),
+            amount,
+            ..Default::default()
+        };
+        let mut transactions = vec![
+            // A fixed monthly subscription.
+            tx("2026-05-06", "Ekwateur", -51.0),
+            tx("2026-06-06", "Ekwateur", -51.0),
+            tx("2026-07-06", "Ekwateur", -51.0),
+            // Two lines with the same supplier, billed at distinct fixed amounts.
+            tx("2026-05-20", "Orange", -29.99),
+            tx("2026-06-20", "Orange", -29.99),
+            tx("2026-07-20", "Orange", -29.99),
+            tx("2026-05-17", "Orange", -15.99),
+            tx("2026-06-17", "Orange", -15.99),
+            tx("2026-07-17", "Orange", -15.99),
+            // Metered billing: monthly, but never the same amount twice.
+            tx("2026-05-09", "Cloudflare", -3.94),
+            tx("2026-06-09", "Cloudflare", -9.17),
+            tx("2026-07-09", "Cloudflare", -3.88),
+            // Income must never be reported as a recurring charge.
+            tx("2026-05-02", "Elena", 800.0),
+            tx("2026-06-02", "Elena", 800.0),
+            tx("2026-07-02", "Elena", 800.0),
+        ];
+        // Groceries: frequent, and a different total every run.
+        for (visit, day) in [2, 7, 9, 14, 18, 23, 28].into_iter().enumerate() {
+            for (offset, month) in ["05", "06", "07"].into_iter().enumerate() {
+                let amount = -(10.0 + visit as f64 * 3.7 + offset as f64 * 1.3);
+                transactions.push(tx(&format!("2026-{month}-{day:02}"), "Lidl", amount));
+            }
+        }
+
+        let found = recurring(&transactions, 3).unwrap();
+        let names: Vec<&str> = found.iter().map(|r| r.merchant.as_str()).collect();
+
+        assert!(!names.contains(&"LIDL"), "groceries are not a subscription");
+        assert!(!names.contains(&"ELENA"), "income is not a charge");
+        assert_eq!(names.iter().filter(|n| **n == "ORANGE").count(), 2);
+
+        let ekwateur = found.iter().find(|r| r.merchant == "EKWATEUR").unwrap();
+        assert!(ekwateur.is_fixed());
+        assert_eq!(ekwateur.every_days, 31);
+        assert_eq!(ekwateur.total, 153.0);
+
+        let cloudflare = found.iter().find(|r| r.merchant == "CLOUDFLARE").unwrap();
+        assert!(!cloudflare.is_fixed());
+        assert_eq!(cloudflare.amount_min, 3.88);
+        assert_eq!(cloudflare.amount_max, 9.17);
+        assert_eq!(cloudflare.last, "2026-07-09");
+    }
+
+    pub const TRANSACTIONS_CSV: &str = r#"dateOp;dateVal;label;suggestedLabel;category;categoryParent;amount;comment;accountNum;accountLabel;accountbalance;mark
+2026-07-24;2026-07-24;"VIR INST MARTIROS SHAHBAZYAN";"Vir Inst Martiros Shahbazyan";"Virements reçus";"Virements reçus";21,81;;00040105299;BoursoBank;0.05;Non
+2026-07-22;2026-07-22;"CARTE 20/07/26 CLOUDFLARE CB*5287";Cloudflare;"Non catégorisé";"Non catégorisé";-3,94;;00040105299;BoursoBank;-21.76;Non
+2026-07-22;2026-07-22;"CARTE 21/07/26 LIDL 4147 CB*5287";Lidl;Alimentation;"Vie quotidienne";-13,69;;00040105299;BoursoBank;-21.76;Non
+"#;
+
+    /// Same rows, but with the `tags` column BoursoBank inserts at index 3.
+    pub const TRANSACTIONS_CSV_WITH_TAGS: &str = r#"dateOp;dateVal;label;tags;suggestedLabel;category;categoryParent;amount;comment;accountNum;accountLabel;accountbalance;mark
+2026-07-24;2026-07-24;"VIR INST MARTIROS SHAHBAZYAN";;"Vir Inst Martiros Shahbazyan";"Virements reçus";"Virements reçus";21,81;;00040105299;BoursoBank;0.05;Non
+2026-07-22;2026-07-22;"CARTE 20/07/26 CLOUDFLARE CB*5287";"???";Cloudflare;"Non catégorisé";"Non catégorisé";-3,94;;00040105299;BoursoBank;-21.76;Non
+2026-07-22;2026-07-22;"CARTE 21/07/26 LIDL 4147 CB*5287";;Lidl;Alimentation;"Vie quotidienne";-13,69;;00040105299;BoursoBank;-21.76;Non
 "#;
 }

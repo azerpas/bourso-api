@@ -2,21 +2,23 @@ use anyhow::{Context, Result};
 use bourso_api::{
     account::{Account, AccountKind, Transaction},
     client::{
-        trade::{order::OrderSide, tick::QuoteTab},
-        transfer::TransferProgress,
         BoursoWebClient,
+        trade::{order::OrderSide, tick::QuoteTab},
+        transaction::recurring,
+        transfer::TransferProgress,
     },
     get_client,
 };
+use chrono::{Local, Months};
 use clap::ArgMatches;
-use futures_util::{pin_mut, StreamExt};
+use futures_util::{StreamExt, pin_mut};
 use tracing::{debug, info, warn};
 
 pub mod qrcode;
 pub mod settings;
 pub mod validate;
 
-use settings::{get_settings, save_settings, Settings};
+use settings::{Settings, get_settings, save_settings};
 
 #[cfg(not(tarpaulin_include))]
 pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
@@ -96,18 +98,36 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                     }
 
                     info!(
-                        close = quote.close, open = quote.open, high = quote.high, low = quote.low, volume = quote.volume,
+                        close = quote.close,
+                        open = quote.open,
+                        high = quote.high,
+                        low = quote.low,
+                        volume = quote.volume,
                         "Last quote: current: {:#?}, open: {:#?}, high: {:#?}, low: {:#?}, volume: {:#?}",
-                        quote.close, quote.open, quote.high, quote.low, quote.volume
+                        quote.close,
+                        quote.open,
+                        quote.high,
+                        quote.low,
+                        quote.volume
                     );
                 }
                 _ => {
                     info!("Quotes:");
                     for quote in quotes.d.quote_tab.iter() {
                         info!(
-                            date = quote.date, close = quote.close, open = quote.open, high = quote.high, low = quote.low, volume = quote.volume,
+                            date = quote.date,
+                            close = quote.close,
+                            open = quote.open,
+                            high = quote.high,
+                            low = quote.low,
+                            volume = quote.volume,
                             "Quote day {:#?}: Close: {:#?}, Open: {:#?}, High: {:#?}, Low: {:#?}, Volume: {:#?}",
-                            quote.date, quote.close, quote.open, quote.high, quote.low, quote.volume,
+                            quote.date,
+                            quote.close,
+                            quote.open,
+                            quote.high,
+                            quote.low,
+                            quote.volume,
                         );
                     }
                 }
@@ -136,7 +156,9 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     );
     info!("If you want to change it, run `bourso config --username <customer_id>`");
     println!("");
-    info!("We'll need your password to log you in. It will not be stored anywhere and will be asked everytime you run a command. The password will be hidden while typing.");
+    info!(
+        "We'll need your password to log you in. It will not be stored anywhere and will be asked everytime you run a command. The password will be hidden while typing."
+    );
 
     // Get password from stdin
     let password = match settings.password {
@@ -164,7 +186,9 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                         return Err(e);
                     }
                 };
-                info!("To validate your identity, please open the BoursoBank app and validate the login request.");
+                info!(
+                    "To validate your identity, please open the BoursoBank app and validate the login request."
+                );
 
                 // Loop until MFA is ready, timeout after 5 minutes
                 let mut wait_time = 0;
@@ -256,79 +280,147 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
             println!("{:#?}", accounts);
         }
 
-        Some(("export", export_matches)) => {
-            match export_matches.subcommand() {
-                Some(("transactions", tx_matches)) => {
-                    let account_id = tx_matches
-                        .get_one::<String>("account")
-                        .map(|s| s.as_str())
-                        .unwrap();
-                    let start_date = tx_matches
-                        .get_one::<String>("start-date")
-                        .map(|s| s.as_str())
-                        .unwrap();
-                    let end_date = tx_matches
-                        .get_one::<String>("end-date")
-                        .map(|s| s.as_str())
-                        .unwrap();
-                    let format = tx_matches
-                        .get_one::<String>("format")
-                        .map(|s| s.as_str())
-                        .unwrap();
-                    let output_path = tx_matches
-                        .get_one::<String>("output")
-                        .map(|s| s.as_str());
+        Some(("export", export_matches)) => match export_matches.subcommand() {
+            Some(("transactions", tx_matches)) => {
+                let account_id = tx_matches
+                    .get_one::<String>("account")
+                    .map(|s| s.as_str())
+                    .unwrap();
+                let start_date = tx_matches
+                    .get_one::<String>("start-date")
+                    .map(|s| s.as_str())
+                    .unwrap();
+                let end_date = tx_matches
+                    .get_one::<String>("end-date")
+                    .map(|s| s.as_str())
+                    .unwrap();
+                let format = tx_matches
+                    .get_one::<String>("format")
+                    .map(|s| s.as_str())
+                    .unwrap();
+                let output_path = tx_matches.get_one::<String>("output").map(|s| s.as_str());
 
-                    info!(
-                        "Fetching transactions for account {} from {} to {}...",
-                        account_id, start_date, end_date
-                    );
+                info!(
+                    "Fetching transactions for account {} from {} to {}...",
+                    account_id, start_date, end_date
+                );
 
-                    let transactions: Vec<Transaction> = web_client
-                        .get_transactions(account_id, start_date, end_date)
-                        .await?;
+                let transactions: Vec<Transaction> = web_client
+                    .get_transactions(account_id, start_date, end_date)
+                    .await?;
 
-                    info!("Found {} transactions", transactions.len());
+                info!("Found {} transactions", transactions.len());
 
-                    let content = match format {
-                        "json" => serde_json::to_string_pretty(&transactions)?,
-                        _ => {
-                            let mut lines = vec![
+                let content = match format {
+                    "json" => serde_json::to_string_pretty(&transactions)?,
+                    _ => {
+                        let mut lines = vec![
                                 "dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance".to_string()
                             ];
-                            for tx in &transactions {
-                                lines.push(format!(
-                                    "{};{};{};{};{};{};{};{};{};{};{}",
-                                    tx.date_op,
-                                    tx.date_val,
-                                    tx.label,
-                                    tx.category,
-                                    tx.category_parent,
-                                    tx.supplier_found,
-                                    format!("{:.2}", tx.amount),
-                                    tx.comment,
-                                    tx.account_num,
-                                    tx.account_label,
-                                    format!("{:.2}", tx.account_balance),
-                                ));
-                            }
-                            lines.join("\n")
+                        for tx in &transactions {
+                            lines.push(format!(
+                                "{};{};{};{};{};{};{};{};{};{};{}",
+                                tx.date_op,
+                                tx.date_val,
+                                tx.label,
+                                tx.category,
+                                tx.category_parent,
+                                tx.supplier_found,
+                                format!("{:.2}", tx.amount),
+                                tx.comment,
+                                tx.account_num,
+                                tx.account_label,
+                                format!("{:.2}", tx.account_balance),
+                            ));
                         }
-                    };
+                        lines.join("\n")
+                    }
+                };
 
-                    match output_path {
-                        Some(path) => {
-                            std::fs::write(path, &content)?;
-                            info!("Transactions exported to {}", path);
-                        }
-                        None => {
-                            println!("{}", content);
-                        }
+                match output_path {
+                    Some(path) => {
+                        std::fs::write(path, &content)?;
+                        info!("Transactions exported to {}", path);
+                    }
+                    None => {
+                        println!("{}", content);
                     }
                 }
-                _ => unreachable!(),
             }
-        }
+            Some(("recurring", rec_matches)) => {
+                let account_id = rec_matches
+                    .get_one::<String>("account")
+                    .map(|s| s.as_str())
+                    .unwrap();
+                let months = *rec_matches.get_one::<u32>("months").unwrap();
+                let min_occurrences = *rec_matches.get_one::<usize>("min-occurrences").unwrap();
+                let format = rec_matches
+                    .get_one::<String>("format")
+                    .map(|s| s.as_str())
+                    .unwrap();
+
+                let end = Local::now().date_naive();
+                let start = end
+                    .checked_sub_months(Months::new(months))
+                    .context("Lookback window starts before the calendar begins")?;
+                let (start_date, end_date) = (
+                    start.format("%d/%m/%Y").to_string(),
+                    end.format("%d/%m/%Y").to_string(),
+                );
+
+                info!(
+                    "Scanning {} months of transactions ({} to {})...",
+                    months, start_date, end_date
+                );
+
+                let transactions: Vec<Transaction> = web_client
+                    .get_transactions(account_id, &start_date, &end_date)
+                    .await?;
+                let found = recurring(&transactions, min_occurrences)?;
+
+                info!(
+                    "Found {} recurring charges among {} transactions",
+                    found.len(),
+                    transactions.len()
+                );
+
+                match format {
+                    "json" => println!("{}", serde_json::to_string_pretty(&found)?),
+                    _ => {
+                        println!(
+                            "{:<26.26} {:>3} {:>7} {:>15} {:>9} {:>11}",
+                            "MERCHANT", "N", "EVERY", "AMOUNT", "EST/MO", "LAST"
+                        );
+                        for charge in &found {
+                            let amount = if charge.is_fixed() {
+                                format!("{:.2}", charge.amount_min)
+                            } else {
+                                format!("{:.2}-{:.2}", charge.amount_min, charge.amount_max)
+                            };
+                            println!(
+                                "{:<26.26} {:>3} {:>7} {:>15} {:>9} {:>11}",
+                                charge.merchant,
+                                charge.occurrences,
+                                format!("{}d", charge.every_days),
+                                amount,
+                                format!("{:.2}", charge.total / charge.months as f64),
+                                charge.last,
+                            );
+                        }
+                        let monthly: f64 = found
+                            .iter()
+                            .map(|charge| charge.total / charge.months as f64)
+                            .sum();
+                        println!(
+                            "\n≈ {:.2} EUR/month across {} charges",
+                            monthly,
+                            found.len()
+                        );
+                    }
+                }
+            }
+            _ => unreachable!(),
+        },
 
         Some(("trade", trade_matches)) => {
             accounts = web_client.get_accounts(Some(AccountKind::Trading)).await?;
