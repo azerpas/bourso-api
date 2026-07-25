@@ -23,7 +23,8 @@
           rust = pkgs.rust-bin.stable."1.93.0".default.override {
             extensions = [ "rust-src" "rust-analyzer" ];
           };
-          pname = "nautilus_trader";
+          manifest = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package;
+          pname = manifest.name;
           #rs = v_flakes.rs { inherit pkgs rust; };
           github = v_flakes.github {
             enable = true;
@@ -37,6 +38,17 @@
           combined = v_flakes.utils.combine [ github ];
         in
         {
+          packages.default = (pkgs.makeRustPlatform { rustc = rust; cargo = rust; inherit stdenv; }).buildRustPackage {
+            inherit pname;
+            version = manifest.version;
+
+            cargoLock.lockFile = ./Cargo.lock;
+            src = pkgs.lib.cleanSource ./.;
+
+            buildInputs = [ pkgs.openssl ];
+            nativeBuildInputs = [ pkgs.pkg-config ];
+          };
+
           devShells.default = with pkgs; mkShell {
             inherit stdenv;
             shellHook =
