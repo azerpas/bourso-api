@@ -1,23 +1,26 @@
-name: cachix
-on:
-  push:
-    branches: [main]
-  workflow_dispatch: {}
 jobs:
   build:
     name: build ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v31
+    - uses: cachix/cachix-action@v17
+      with:
+        authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        name: valeratrades
+    - run: nix build -L '.#packages.${{ matrix.system }}.default'
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: ubuntu-latest,    system: x86_64-linux }
-          - { runner: ubuntu-24.04-arm, system: aarch64-linux }
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31
-      - uses: cachix/cachix-action@v17
-        with:
-          name: valeratrades
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - run: nix build -L '.#packages.${{ matrix.system }}.default'
+        - runner: ubuntu-latest
+          system: x86_64-linux
+        - runner: ubuntu-24.04-arm
+          system: aarch64-linux
+name: cachix
+'on':
+  push:
+    branches:
+    - main
+  workflow_dispatch: {}

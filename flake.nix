@@ -25,17 +25,15 @@
           };
           manifest = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package;
           pname = manifest.name;
-          #rs = v_flakes.rs { inherit pkgs rust; };
+          # Standalone workflows only: `enable` pulls in the rust scaffolding (build.rs,
+          # .cargo/, nightly-only `cargo -Zscript` hooks), which this fork rebases over
+          # upstream daily and must not carry.
           github = v_flakes.github {
-            enable = true;
             inherit pkgs pname;
             syncFork = true;
-            gitignore.extend = ''
-              						*.chls
-              						*.chlz
-              						'';
+            publishCachix = "valeratrades";
           };
-          combined = v_flakes.utils.combine [ github ];
+          combined = v_flakes.utils.combine { inherit rust; modules = [ github ]; };
         in
         {
           packages.default = (pkgs.makeRustPlatform { rustc = rust; cargo = rust; inherit stdenv; }).buildRustPackage {

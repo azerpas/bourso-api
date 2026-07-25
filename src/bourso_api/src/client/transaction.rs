@@ -447,9 +447,9 @@ mod tests {
             tx("2026-06-09", "Cloudflare", -9.17),
             tx("2026-07-09", "Cloudflare", -3.88),
             // Income must never be reported as a recurring charge.
-            tx("2026-05-02", "Elena", 800.0),
-            tx("2026-06-02", "Elena", 800.0),
-            tx("2026-07-02", "Elena", 800.0),
+            tx("2026-05-02", "_", 800.0),
+            tx("2026-06-02", "_", 800.0),
+            tx("2026-07-02", "_", 800.0),
         ];
         // Groceries: frequent, and a different total every run.
         for (visit, day) in [2, 7, 9, 14, 18, 23, 28].into_iter().enumerate() {
