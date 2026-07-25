@@ -3,7 +3,7 @@ use crate::constants::BASE_URL;
 
 use super::BoursoWebClient;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::NaiveDate;
 use regex::Regex;
 use serde::Serialize;
@@ -97,18 +97,12 @@ impl BoursoWebClient {
         // Strip BOM if present
         let content = content.strip_prefix('\u{FEFF}').unwrap_or(&content);
 
-        // An HTML response means no transactions were found for the given period
-        if content.starts_with("<!DOCTYPE") || content.starts_with("<html") {
-            debug!(
-                "No transactions found for account {} from {} to {}",
-                account_id, from_date, to_date
-            );
-            return Ok(Vec::new());
-        }
-
         extract_transactions(content)
     }
 }
+
+/// Rendered in place of a CSV body when the export filters match no movement.
+const NO_MOVEMENTS_MARKER: &str = "Aucune opération ne correspond";
 
 /// Parse a French-formatted amount string to f64.
 ///
@@ -135,6 +129,18 @@ fn parse_amount(s: &str) -> Result<f64> {
 ///
 /// The transactions list as a vector of `Transaction`.
 fn extract_transactions(content: &str) -> Result<Vec<Transaction>> {
+    // Getting a web page where CSV was requested means either "nothing matched the
+    // filters" or that we were bounced (expired session, changed export flow). Only
+    // the first is an empty result; treating both as one hid a broken export before.
+    if content.starts_with("<!DOCTYPE") || content.starts_with("<html") {
+        if content.contains(NO_MOVEMENTS_MARKER) {
+            return Ok(Vec::new());
+        }
+        bail!(
+            "Export returned an HTML page instead of CSV, and it does not say the filters matched nothing; the session has most likely expired"
+        );
+    }
+
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b';')
         .has_headers(true)
@@ -157,7 +163,8 @@ fn extract_transactions(content: &str) -> Result<Vec<Transaction>> {
     let date_val = column("dateVal");
     let category = column("category");
     let category_parent = column("categoryParent");
-    let supplier_found = column("suggestedLabel");
+    // Renamed across export versions; both spellings carry BoursoBank's supplier guess.
+    let supplier_found = column("suggestedLabel").or_else(|| column("supplierFound"));
     let comment = column("comment");
     let account_num = column("accountNum");
     let account_label = column("accountLabel");
@@ -229,6 +236,13 @@ pub fn recurring(transactions: &[Transaction], min_occurrences: usize) -> Result
     assert!(min_occurrences > 0, "min_occurrences must be positive");
 
     let spends: Vec<&Transaction> = transactions.iter().filter(|tx| tx.amount < 0.0).collect();
+
+    // Grouping leans on BoursoBank's supplier guess. Without it every card label is
+    // unique (each carries its own date and card number), so nothing would ever group
+    // and this would answer "no subscriptions" instead of admitting it cannot tell.
+    if !spends.is_empty() && spends.iter().all(|tx| tx.supplier_found.trim().is_empty()) {
+        bail!("Export carries no supplier labels, so charges cannot be grouped by merchant");
+    }
 
     let mut by_fixed_amount: BTreeMap<(String, i64), Vec<&Transaction>> = BTreeMap::new();
     for tx in &spends {
@@ -379,13 +393,33 @@ mod tests {
         assert!(extract_transactions(csv).is_err());
     }
 
+    /// BoursoBank answers an empty range with the search page, not an empty CSV.
     #[test]
-    fn test_extract_transactions_empty_html() {
-        let html = "<!DOCTYPE html><html><body>Error</body></html>";
-        // HTML content should not be passed to extract_transactions
-        // (handled by get_transactions), but let's verify it fails gracefully
-        let result = extract_transactions(html);
-        assert!(result.is_err() || result.unwrap().is_empty());
+    fn test_extract_transactions_empty_range_is_not_an_error() {
+        let html = format!(
+            "<!DOCTYPE html><html><body>{}  vos filtres de recherche.</body></html>",
+            NO_MOVEMENTS_MARKER
+        );
+        assert!(extract_transactions(&html).unwrap().is_empty());
+    }
+
+    /// Any other page (an expired session bouncing us to login) must not read as "no
+    /// transactions" — that camouflage is what hid a broken export for so long.
+    #[test]
+    fn test_extract_transactions_rejects_unexpected_html() {
+        let html = "<!DOCTYPE html><html><body>Identifiez-vous</body></html>";
+        assert!(extract_transactions(html).is_err());
+    }
+
+    #[test]
+    fn test_recurring_rejects_supplierless_export() {
+        let spend = Transaction {
+            date_op: "2026-07-01".to_string(),
+            label: "CARTE 30/06/26 SOMETHING CB*5287".to_string(),
+            amount: -10.0,
+            ..Default::default()
+        };
+        assert!(recurring(&[spend], 3).is_err());
     }
 
     #[test]
