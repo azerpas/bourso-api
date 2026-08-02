@@ -119,6 +119,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         Some(("accounts", _))
         | Some(("export", _))
         | Some(("balance", _))
+        | Some(("summary", _))
         | Some(("trade", _))
         | Some(("transfer", _)) => (),
         _ => unreachable!(),
@@ -254,6 +255,91 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
             info!("Found {} accounts", accounts.len());
             println!("{:#?}", accounts);
+        }
+
+        Some(("summary", summary_matches)) => {
+            accounts = web_client.get_accounts(Some(AccountKind::Trading)).await?;
+
+            let account_id = summary_matches
+                .get_one::<String>("account")
+                .map(|s| s.as_str());
+
+            let account = match account_id {
+                Some(id) => accounts
+                    .iter()
+                    .find(|a| a.id == id)
+                    .context("Account not found. Are you sure you have access to it? Run `bourso accounts` to list your accounts")?,
+                None => accounts
+                    .first()
+                    .context("No trading account found. Run `bourso accounts --trading` to list your trading accounts")?,
+            };
+
+            info!(
+                "Fetching trading summary for account {} ({})...",
+                account.name, account.id
+            );
+
+            let summary = web_client.get_trading_summary(account.clone()).await?;
+
+            let format = summary_matches
+                .get_one::<String>("format")
+                .map(|s| s.as_str())
+                .unwrap_or("json");
+
+            match format {
+                "table" => {
+                    for item in &summary {
+                        if let Some(account_summary) = &item.account {
+                            println!("=== {} ===", account_summary.name);
+                            println!(
+                                "  Balance:      {} {}",
+                                account_summary.balance.value, account_summary.currency
+                            );
+                            println!(
+                                "  Cash:         {} {}",
+                                account_summary.cash.value, account_summary.currency
+                            );
+                            println!(
+                                "  Valuation:    {} {}",
+                                account_summary.valuation.value, account_summary.currency
+                            );
+                            println!(
+                                "  Total:        {} {}",
+                                account_summary.total.value, account_summary.currency
+                            );
+                            println!(
+                                "  Gain/loss:    {} {} ({}%)",
+                                account_summary.gain_loss.value,
+                                account_summary.currency,
+                                account_summary.gain_loss_percent.value
+                            );
+                            println!(
+                                "  Contribution: {} {}",
+                                account_summary.contribution, account_summary.currency
+                            );
+                        }
+                        if let Some(positions) = &item.positions {
+                            println!("  Positions:");
+                            for p in positions {
+                                println!(
+                                    "  - {} ({}): qty={} buy_price={} amount={} last={} gain_loss={} ({}%)",
+                                    p.label,
+                                    p.symbol,
+                                    p.quantity.value,
+                                    p.buying_price.value,
+                                    p.amount.value,
+                                    p.last.value,
+                                    p.gain_loss.value,
+                                    p.gain_loss_percent.value
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    println!("{}", serde_json::to_string_pretty(&summary)?);
+                }
+            }
         }
 
         Some(("export", export_matches)) => {

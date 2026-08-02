@@ -19,6 +19,7 @@ The first goal of this project was creating an automated [DCA (Dollar Cost Avera
   - [From source](#from-source)
 - [Usage](#usage)
   - [Get your accounts](#get-your-accounts) 
+  - [Get a trading summary](#get-a-trading-summary)
   - [Place an order](#place-an-order)
   - [Quote 🥷](#quote)
   - [Transfer funds](#transfer-funds)
@@ -106,6 +107,27 @@ You'll get something like this:
         kind: Trading,
     },
 ]
+```
+
+### Get a trading summary
+Retrieve the account details and the positions (quantity, buying price, current value, gain/loss) of your trading accounts (PEA, PEA-PME, CTO). Requires login.
+
+Get the summary of the first trading account:
+```
+./bourso-cli summary
+```
+
+Specify a trading account:
+```
+./bourso-cli summary --account a583f3c5842c34fb00b408486ef493e0
+```
+*Tip: You can get the accounts ids from the [`accounts` command](#get-your-accounts)*
+
+By default the output is JSON.
+
+You can also get a human readable table with `--format table`:
+```
+./bourso-cli summary --format table
 ```
 
 ### Place an order

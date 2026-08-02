@@ -231,6 +231,25 @@ async fn main() -> Result<()> {
                         .required(false)
                 )
         )
+        .subcommand(
+            Command::new("summary")
+                .about("Get a summary of your trading accounts (PEA, PEA-PME, CTO). Outputs the account details and the positions (quantity, buying price, gain/loss) as JSON")
+                .arg(
+                    Arg::new("account")
+                        .long("account")
+                        .help("The trading account id (e.g: 'e51f635524a7d506e4d4a7a8088b6278'). If not set, the first trading account is used")
+                        .value_parser(ValueParser::new(validate_account_id))
+                        .required(false)
+                )
+                .arg(
+                    Arg::new("format")
+                        .long("format")
+                        .short('f')
+                        .help("Output format")
+                        .default_value("json")
+                        .value_parser(["json", "table"])
+                )
+        )
         .arg(
             Arg::new("credentials")
                 .long("credentials")
