@@ -3,8 +3,11 @@ use crate::constants::BASE_URL;
 
 use super::BoursoWebClient;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
+use chrono::NaiveDate;
 use regex::Regex;
+use serde::Serialize;
+use std::collections::{BTreeMap, HashSet};
 use tracing::debug;
 
 impl BoursoWebClient {
@@ -202,6 +205,142 @@ fn extract_transactions(content: &str) -> Result<Vec<Transaction>> {
         .collect()
 }
 
+/// A charge that repeats: same merchant, on a steady cadence.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct Recurring {
+    pub merchant: String,
+    pub occurrences: usize,
+    /// Distinct calendar months in which the merchant charged.
+    pub months: usize,
+    /// Median gap between consecutive charges, in days.
+    pub every_days: i64,
+    pub amount_min: f64,
+    pub amount_max: f64,
+    pub total: f64,
+    pub last: String,
+}
+
+impl Recurring {
+    pub fn is_fixed(&self) -> bool {
+        self.amount_min == self.amount_max
+    }
+}
+
+/// Find charges that repeat, over transactions already filtered to a date range.
+///
+/// Two kinds qualify: an identical amount billed repeatedly (a plain subscription),
+/// and a merchant billing a varying amount but no more than twice a month (metered
+/// services). The latter cap is what keeps everyday spending out — groceries hit the
+/// same merchant far more often than any subscription bills.
+pub fn recurring(transactions: &[Transaction], min_occurrences: usize) -> Result<Vec<Recurring>> {
+    assert!(min_occurrences > 0, "min_occurrences must be positive");
+
+    let spends: Vec<&Transaction> = transactions.iter().filter(|tx| tx.amount < 0.0).collect();
+
+    // Grouping leans on BoursoBank's supplier guess. Without it every card label is
+    // unique (each carries its own date and card number), so nothing would ever group
+    // and this would answer "no subscriptions" instead of admitting it cannot tell.
+    if !spends.is_empty() && spends.iter().all(|tx| tx.supplier_found.trim().is_empty()) {
+        bail!("Export carries no supplier labels, so charges cannot be grouped by merchant");
+    }
+
+    let mut by_fixed_amount: BTreeMap<(String, i64), Vec<&Transaction>> = BTreeMap::new();
+    for tx in &spends {
+        let cents = (tx.amount * 100.0).round() as i64;
+        by_fixed_amount
+            .entry((merchant(tx), cents))
+            .or_default()
+            .push(tx);
+    }
+
+    let mut found = Vec::new();
+    let mut claimed: HashSet<(String, i64)> = HashSet::new();
+    for ((name, cents), group) in &by_fixed_amount {
+        let summary = summarize(name, group)?;
+        if qualifies(&summary, min_occurrences) {
+            claimed.insert((name.clone(), *cents));
+            found.push(summary);
+        }
+    }
+
+    let mut by_merchant: BTreeMap<String, Vec<&Transaction>> = BTreeMap::new();
+    for tx in &spends {
+        let cents = (tx.amount * 100.0).round() as i64;
+        let name = merchant(tx);
+        if claimed.contains(&(name.clone(), cents)) {
+            continue;
+        }
+        by_merchant.entry(name).or_default().push(tx);
+    }
+
+    for (name, group) in &by_merchant {
+        let summary = summarize(name, group)?;
+        if qualifies(&summary, min_occurrences) {
+            found.push(summary);
+        }
+    }
+
+    found.sort_by(|a, b| b.total.abs().total_cmp(&a.total.abs()));
+    Ok(found)
+}
+
+/// Billing at most twice a month is what separates a subscription from a habit:
+/// a merchant you simply shop at turns up far more often than any plan bills.
+fn qualifies(summary: &Recurring, min_occurrences: usize) -> bool {
+    summary.occurrences >= min_occurrences
+        && summary.months >= min_occurrences
+        && summary.occurrences <= summary.months * 2
+}
+
+/// BoursoBank's own supplier guess collapses "CARTE 20/07/26 LIDL 1234 CB*1234"
+/// down to "Lidl", which groups far better than the raw label ever could.
+fn merchant(tx: &Transaction) -> String {
+    let name = if tx.supplier_found.trim().is_empty() {
+        tx.label.trim()
+    } else {
+        tx.supplier_found.trim()
+    };
+    name.to_uppercase()
+}
+
+fn summarize(name: &str, group: &[&Transaction]) -> Result<Recurring> {
+    let mut dates: Vec<NaiveDate> = group
+        .iter()
+        .map(|tx| {
+            NaiveDate::parse_from_str(&tx.date_op, "%Y-%m-%d")
+                .with_context(|| format!("Unparseable operation date {:?}", tx.date_op))
+        })
+        .collect::<Result<_>>()?;
+    dates.sort_unstable();
+
+    let mut gaps: Vec<i64> = dates
+        .windows(2)
+        .map(|pair| (pair[1] - pair[0]).num_days())
+        .collect();
+    gaps.sort_unstable();
+
+    let amounts: Vec<f64> = group.iter().map(|tx| tx.amount.abs()).collect();
+    let months: HashSet<(i32, u32)> = dates
+        .iter()
+        .map(|date| (chrono::Datelike::year(date), chrono::Datelike::month(date)))
+        .collect();
+
+    Ok(Recurring {
+        merchant: name.to_string(),
+        occurrences: group.len(),
+        months: months.len(),
+        every_days: gaps.get(gaps.len() / 2).copied().unwrap_or(0),
+        amount_min: amounts.iter().copied().fold(f64::INFINITY, f64::min),
+        amount_max: amounts.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        total: amounts.iter().sum(),
+        last: dates
+            .last()
+            .expect("group is non-empty by construction")
+            .format("%Y-%m-%d")
+            .to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +409,73 @@ mod tests {
     fn test_extract_transactions_rejects_unexpected_html() {
         let html = "<!DOCTYPE html><html><body>Identifiez-vous</body></html>";
         assert!(extract_transactions(html).is_err());
+    }
+
+    #[test]
+    fn test_recurring_rejects_supplierless_export() {
+        let spend = Transaction {
+            date_op: "2026-07-01".to_string(),
+            label: "CARTE 30/06/26 SOMETHING CB*1234".to_string(),
+            amount: -10.0,
+            ..Default::default()
+        };
+        assert!(recurring(&[spend], 3).is_err());
+    }
+
+    #[test]
+    fn test_recurring_separates_subscriptions_from_shopping() {
+        let tx = |date: &str, supplier: &str, amount: f64| Transaction {
+            date_op: date.to_string(),
+            supplier_found: supplier.to_string(),
+            amount,
+            ..Default::default()
+        };
+        let mut transactions = vec![
+            // A fixed monthly subscription.
+            tx("2026-05-06", "Ekwateur", -51.0),
+            tx("2026-06-06", "Ekwateur", -51.0),
+            tx("2026-07-06", "Ekwateur", -51.0),
+            // Two lines with the same supplier, billed at distinct fixed amounts.
+            tx("2026-05-20", "Orange", -29.99),
+            tx("2026-06-20", "Orange", -29.99),
+            tx("2026-07-20", "Orange", -29.99),
+            tx("2026-05-17", "Orange", -15.99),
+            tx("2026-06-17", "Orange", -15.99),
+            tx("2026-07-17", "Orange", -15.99),
+            // Metered billing: monthly, but never the same amount twice.
+            tx("2026-05-09", "Cloudflare", -3.94),
+            tx("2026-06-09", "Cloudflare", -9.17),
+            tx("2026-07-09", "Cloudflare", -3.88),
+            // Income must never be reported as a recurring charge.
+            tx("2026-05-02", "Payroll", 800.0),
+            tx("2026-06-02", "Payroll", 800.0),
+            tx("2026-07-02", "Payroll", 800.0),
+        ];
+        // Groceries: frequent, and a different total every run.
+        for (visit, day) in [2, 7, 9, 14, 18, 23, 28].into_iter().enumerate() {
+            for (offset, month) in ["05", "06", "07"].into_iter().enumerate() {
+                let amount = -(10.0 + visit as f64 * 3.7 + offset as f64 * 1.3);
+                transactions.push(tx(&format!("2026-{month}-{day:02}"), "Lidl", amount));
+            }
+        }
+
+        let found = recurring(&transactions, 3).unwrap();
+        let names: Vec<&str> = found.iter().map(|r| r.merchant.as_str()).collect();
+
+        assert!(!names.contains(&"LIDL"), "groceries are not a subscription");
+        assert!(!names.contains(&"PAYROLL"), "income is not a charge");
+        assert_eq!(names.iter().filter(|n| **n == "ORANGE").count(), 2);
+
+        let ekwateur = found.iter().find(|r| r.merchant == "EKWATEUR").unwrap();
+        assert!(ekwateur.is_fixed());
+        assert_eq!(ekwateur.every_days, 31);
+        assert_eq!(ekwateur.total, 153.0);
+
+        let cloudflare = found.iter().find(|r| r.merchant == "CLOUDFLARE").unwrap();
+        assert!(!cloudflare.is_fixed());
+        assert_eq!(cloudflare.amount_min, 3.88);
+        assert_eq!(cloudflare.amount_max, 9.17);
+        assert_eq!(cloudflare.last, "2026-07-09");
     }
 
     pub const TRANSACTIONS_CSV: &str = r#"dateOp;dateVal;label;suggestedLabel;category;categoryParent;amount;comment;accountNum;accountLabel;accountbalance;mark

@@ -3,11 +3,13 @@ use bourso_api::{
     account::{Account, AccountKind, Transaction},
     client::{
         trade::{order::OrderSide, tick::QuoteTab},
+        transaction::recurring,
         transfer::TransferProgress,
         BoursoWebClient,
     },
     get_client,
 };
+use chrono::{Local, Months};
 use clap::ArgMatches;
 use futures_util::{pin_mut, StreamExt};
 use tracing::{debug, info, warn};
@@ -323,6 +325,78 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                         }
                         None => {
                             println!("{}", content);
+                        }
+                    }
+                }
+                Some(("recurring", rec_matches)) => {
+                    let account_id = rec_matches
+                        .get_one::<String>("account")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let months = *rec_matches.get_one::<u32>("months").unwrap();
+                    let min_occurrences = *rec_matches.get_one::<usize>("min-occurrences").unwrap();
+                    let format = rec_matches
+                        .get_one::<String>("format")
+                        .map(|s| s.as_str())
+                        .unwrap();
+
+                    let end = Local::now().date_naive();
+                    let start = end
+                        .checked_sub_months(Months::new(months))
+                        .context("Lookback window starts before the calendar begins")?;
+                    let (start_date, end_date) = (
+                        start.format("%d/%m/%Y").to_string(),
+                        end.format("%d/%m/%Y").to_string(),
+                    );
+
+                    info!(
+                        "Scanning {} months of transactions ({} to {})...",
+                        months, start_date, end_date
+                    );
+
+                    let transactions: Vec<Transaction> = web_client
+                        .get_transactions(account_id, &start_date, &end_date)
+                        .await?;
+                    let found = recurring(&transactions, min_occurrences)?;
+
+                    info!(
+                        "Found {} recurring charges among {} transactions",
+                        found.len(),
+                        transactions.len()
+                    );
+
+                    match format {
+                        "json" => println!("{}", serde_json::to_string_pretty(&found)?),
+                        _ => {
+                            println!(
+                                "{:<26.26} {:>3} {:>7} {:>15} {:>9} {:>11}",
+                                "MERCHANT", "N", "EVERY", "AMOUNT", "EST/MO", "LAST"
+                            );
+                            for charge in &found {
+                                let amount = if charge.is_fixed() {
+                                    format!("{:.2}", charge.amount_min)
+                                } else {
+                                    format!("{:.2}-{:.2}", charge.amount_min, charge.amount_max)
+                                };
+                                println!(
+                                    "{:<26.26} {:>3} {:>7} {:>15} {:>9} {:>11}",
+                                    charge.merchant,
+                                    charge.occurrences,
+                                    format!("{}d", charge.every_days),
+                                    amount,
+                                    format!("{:.2}", charge.total / charge.months as f64),
+                                    charge.last,
+                                );
+                            }
+                            let monthly: f64 = found
+                                .iter()
+                                .map(|charge| charge.total / charge.months as f64)
+                                .sum();
+                            println!(
+                                "\n≈ {:.2} EUR/month across {} charges",
+                                monthly,
+                                found.len()
+                            );
                         }
                     }
                 }
