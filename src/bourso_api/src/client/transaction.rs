@@ -3,7 +3,8 @@ use crate::constants::BASE_URL;
 
 use super::BoursoWebClient;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use regex::Regex;
 use tracing::debug;
 
 impl BoursoWebClient {
@@ -27,19 +28,38 @@ impl BoursoWebClient {
         from_date: &str,
         to_date: &str,
     ) -> Result<Vec<Transaction>> {
+        // The export is a CSRF-protected form POST: first fetch the form page to
+        // read its per-session `_token`, then POST the export request.
+        let form_page = self
+            .client
+            .get(format!("{BASE_URL}/mon-budget/generate"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let token = Regex::new(r#"movementSearch\[_token\][^>]*?value="(?P<token>[^"]*)""#)
+            .expect("valid regex")
+            .captures(&form_page)
+            .and_then(|c| c.name("token"))
+            .context("Could not find export form CSRF token")?
+            .as_str()
+            .to_string();
+
         let response = self
             .client
-            .get(format!("{BASE_URL}/budget/exporter-mouvements"))
-            .query(&[
+            .post(format!("{BASE_URL}/budget/exporter-mouvements"))
+            .form(&[
                 ("movementSearch[selectedAccounts][]", account_id),
                 ("movementSearch[fromDate]", from_date),
                 ("movementSearch[toDate]", to_date),
                 ("movementSearch[format]", "CSV"),
-                ("movementSearch[filteredBy]", "filteredByCategory"),
-                ("movementSearch[catergory]", ""),
+                ("movementSearch[filtredBy]", "filtredByCategory"),
+                ("movementSearch[category]", ""),
                 ("movementSearch[operationTypes]", ""),
                 ("movementSearch[myBudgetPage]", "1"),
-                ("movementSearch[submit]", ""),
+                ("movementSearch[_token]", &token),
             ])
             .headers(self.get_headers())
             .send()
@@ -74,33 +94,26 @@ impl BoursoWebClient {
         // Strip BOM if present
         let content = content.strip_prefix('\u{FEFF}').unwrap_or(&content);
 
-        // An HTML response means no transactions were found for the given period
-        if content.starts_with("<!DOCTYPE") || content.starts_with("<html") {
-            debug!(
-                "No transactions found for account {} from {} to {}",
-                account_id, from_date, to_date
-            );
-            return Ok(Vec::new());
-        }
-
         extract_transactions(content)
     }
 }
+
+/// Rendered in place of a CSV body when the export filters match no movement.
+const NO_MOVEMENTS_MARKER: &str = "Aucune opération ne correspond";
 
 /// Parse a French-formatted amount string to f64.
 ///
 /// Handles thousands separators (spaces and non-breaking spaces) and
 /// comma decimal separators as used in BoursoBank CSV exports.
-fn parse_amount(s: &str) -> f64 {
+fn parse_amount(s: &str) -> Result<f64> {
     let cleaned = s
         .trim()
         .replace('\u{a0}', "")
         .replace(' ', "")
         .replace(',', ".");
-    if cleaned.is_empty() {
-        return 0.0;
-    }
-    cleaned.parse::<f64>().unwrap_or(0.0)
+    cleaned
+        .parse::<f64>()
+        .with_context(|| format!("Unparseable amount {s:?} in export"))
 }
 
 /// Extract transactions from a BoursoBank CSV export string.
@@ -113,28 +126,77 @@ fn parse_amount(s: &str) -> f64 {
 ///
 /// The transactions list as a vector of `Transaction`.
 fn extract_transactions(content: &str) -> Result<Vec<Transaction>> {
+    // Getting a web page where CSV was requested means either "nothing matched the
+    // filters" or that we were bounced (expired session, changed export flow). Only
+    // the first is an empty result; treating both as one hid a broken export before.
+    if content.starts_with("<!DOCTYPE") || content.starts_with("<html") {
+        if content.contains(NO_MOVEMENTS_MARKER) {
+            return Ok(Vec::new());
+        }
+        bail!(
+            "Export returned an HTML page instead of CSV, and it does not say the filters matched nothing; the session has most likely expired"
+        );
+    }
+
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b';')
         .has_headers(true)
         .flexible(true)
         .from_reader(content.as_bytes());
 
+    // Column positions shift between exports: BoursoBank only emits `tags` when some
+    // transaction in the range is tagged, which slides every later column right by one.
+    // Reading by position silently mis-parsed amounts, so fields are resolved by name.
+    let headers = reader
+        .headers()
+        .context("Export has no CSV header")?
+        .clone();
+    let column = |name: &str| headers.iter().position(|header| header.trim() == name);
+
+    let date_op = column("dateOp").context("Export has no `dateOp` column")?;
+    let label = column("label").context("Export has no `label` column")?;
+    let amount = column("amount").context("Export has no `amount` column")?;
+    // The remaining columns are presentational and genuinely absent from some exports.
+    let date_val = column("dateVal");
+    let category = column("category");
+    let category_parent = column("categoryParent");
+    // Renamed across export versions; both spellings carry BoursoBank's supplier guess.
+    let supplier_found = column("suggestedLabel").or_else(|| column("supplierFound"));
+    let comment = column("comment");
+    let account_num = column("accountNum");
+    let account_label = column("accountLabel");
+    let account_balance = column("accountbalance");
+
     reader
         .records()
         .map(|result| {
             let record = result.context("Failed to parse CSV record")?;
+            let field = |index: Option<usize>| {
+                index
+                    .and_then(|index| record.get(index))
+                    .unwrap_or_default()
+                    .to_string()
+            };
             Ok(Transaction {
-                date_op: record.get(0).unwrap_or("").to_string(),
-                date_val: record.get(1).unwrap_or("").to_string(),
-                label: record.get(2).unwrap_or("").to_string(),
-                category: record.get(3).unwrap_or("").to_string(),
-                category_parent: record.get(4).unwrap_or("").to_string(),
-                supplier_found: record.get(5).unwrap_or("").to_string(),
-                amount: parse_amount(record.get(6).unwrap_or("")),
-                comment: record.get(7).unwrap_or("").to_string(),
-                account_num: record.get(8).unwrap_or("").to_string(),
-                account_label: record.get(9).unwrap_or("").to_string(),
-                account_balance: parse_amount(record.get(10).unwrap_or("")),
+                date_op: field(Some(date_op)),
+                date_val: field(date_val),
+                label: field(Some(label)),
+                category: field(category),
+                category_parent: field(category_parent),
+                supplier_found: field(supplier_found),
+                amount: parse_amount(
+                    record
+                        .get(amount)
+                        .context("CSV record is missing its amount field")?,
+                )?,
+                comment: field(comment),
+                account_num: field(account_num),
+                account_label: field(account_label),
+                account_balance: match account_balance.and_then(|index| record.get(index)) {
+                    // Absent on the running-balance-less exports; 0.0 is not a real balance.
+                    None | Some("") => 0.0,
+                    Some(balance) => parse_amount(balance)?,
+                },
             })
         })
         .collect()
@@ -146,43 +208,80 @@ mod tests {
 
     #[test]
     fn test_parse_amount() {
-        assert_eq!(parse_amount("-568,13"), -568.13);
-        assert_eq!(parse_amount("1 718,70"), 1718.70);
-        assert_eq!(parse_amount("-8,99"), -8.99);
-        assert_eq!(parse_amount("37.29"), 37.29);
-        assert_eq!(parse_amount(""), 0.0);
-        assert_eq!(parse_amount("  "), 0.0);
+        assert_eq!(parse_amount("-568,13").unwrap(), -568.13);
+        assert_eq!(parse_amount("1 718,70").unwrap(), 1718.70);
+        assert_eq!(parse_amount("-8,99").unwrap(), -8.99);
+        assert_eq!(parse_amount("37.29").unwrap(), 37.29);
+        assert!(parse_amount("").is_err());
+        assert!(parse_amount("n/a").is_err());
     }
 
     #[test]
     fn test_extract_transactions() {
         let transactions = extract_transactions(TRANSACTIONS_CSV).unwrap();
         assert_eq!(transactions.len(), 3);
-        assert_eq!(transactions[0].date_op, "2026-02-09");
-        assert_eq!(transactions[0].label, "VIR SEPA Loyer Villard");
-        assert_eq!(transactions[0].amount, -568.13);
-        assert_eq!(transactions[0].account_balance, 37.29);
-        assert_eq!(transactions[0].category, "Virements émis");
-        assert_eq!(transactions[1].date_op, "2026-02-06");
-        assert_eq!(transactions[1].label, "CARTE 05/02/26 AMZN Mktp FR*308J CB*7686");
-        assert_eq!(transactions[1].amount, -8.99);
-        assert_eq!(transactions[2].label, "VIR SEPA FRANCE TRAVAIL");
-        assert_eq!(transactions[2].amount, 1718.70);
-        assert_eq!(transactions[2].account_balance, 629.41);
+        assert_eq!(transactions[0].date_op, "2026-07-24");
+        assert_eq!(transactions[0].label, "VIR INST REMBOURSEMENT");
+        assert_eq!(transactions[0].amount, 21.81);
+        assert_eq!(transactions[0].account_balance, 0.05);
+        assert_eq!(transactions[0].category, "Virements reçus");
+        assert_eq!(transactions[1].supplier_found, "Cloudflare");
+        assert_eq!(transactions[1].amount, -3.94);
+        assert_eq!(transactions[2].supplier_found, "Lidl");
+        assert_eq!(transactions[2].amount, -13.69);
+    }
+
+    /// BoursoBank emits `tags` only when a transaction in the range carries one,
+    /// sliding every later column right. Both shapes must parse identically.
+    #[test]
+    fn test_extract_transactions_ignores_column_shift() {
+        let without_tags = extract_transactions(TRANSACTIONS_CSV).unwrap();
+        let with_tags = extract_transactions(TRANSACTIONS_CSV_WITH_TAGS).unwrap();
+
+        let amounts = |txs: &[Transaction]| txs.iter().map(|tx| tx.amount).collect::<Vec<_>>();
+        let suppliers = |txs: &[Transaction]| {
+            txs.iter()
+                .map(|tx| tx.supplier_found.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(amounts(&without_tags), amounts(&with_tags));
+        assert_eq!(suppliers(&without_tags), suppliers(&with_tags));
     }
 
     #[test]
-    fn test_extract_transactions_empty_html() {
-        let html = "<!DOCTYPE html><html><body>Error</body></html>";
-        // HTML content should not be passed to extract_transactions
-        // (handled by get_transactions), but let's verify it fails gracefully
-        let result = extract_transactions(html);
-        assert!(result.is_err() || result.unwrap().is_empty());
+    fn test_extract_transactions_rejects_missing_amount_column() {
+        let csv = "dateOp;label;comment\n2026-07-24;VIR;\n";
+        assert!(extract_transactions(csv).is_err());
     }
 
-    pub const TRANSACTIONS_CSV: &str = r#"dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance
-2026-02-09;2026-02-09;"VIR SEPA Loyer Villard";"Virements émis";"Virements émis";"virement loyer villard";-568,13;;00040613484;BoursoBank;37.29
-2026-02-06;2026-02-06;"CARTE 05/02/26 AMZN Mktp FR*308J CB*7686";"Livres, CD/DVD, bijoux, jouets…";"Vie quotidienne";amazon;-8,99;;00040613484;BoursoBank;605.42
-2026-02-03;2026-02-03;"VIR SEPA FRANCE TRAVAIL";"Virements reçus";"Virements reçus";"virement france travail";1 718,70;;00040613484;BoursoBank;629.41
+    /// BoursoBank answers an empty range with the search page, not an empty CSV.
+    #[test]
+    fn test_extract_transactions_empty_range_is_not_an_error() {
+        let html = format!(
+            "<!DOCTYPE html><html><body>{}  vos filtres de recherche.</body></html>",
+            NO_MOVEMENTS_MARKER
+        );
+        assert!(extract_transactions(&html).unwrap().is_empty());
+    }
+
+    /// Any other page (an expired session bouncing us to login) must not read as "no
+    /// transactions" — that camouflage is what hid a broken export for so long.
+    #[test]
+    fn test_extract_transactions_rejects_unexpected_html() {
+        let html = "<!DOCTYPE html><html><body>Identifiez-vous</body></html>";
+        assert!(extract_transactions(html).is_err());
+    }
+
+    pub const TRANSACTIONS_CSV: &str = r#"dateOp;dateVal;label;suggestedLabel;category;categoryParent;amount;comment;accountNum;accountLabel;accountbalance;mark
+2026-07-24;2026-07-24;"VIR INST REMBOURSEMENT";"Vir Inst Remboursement";"Virements reçus";"Virements reçus";21,81;;00012345678;BoursoBank;0.05;Non
+2026-07-22;2026-07-22;"CARTE 20/07/26 CLOUDFLARE CB*1234";Cloudflare;"Non catégorisé";"Non catégorisé";-3,94;;00012345678;BoursoBank;-21.76;Non
+2026-07-22;2026-07-22;"CARTE 21/07/26 LIDL 1234 CB*1234";Lidl;Alimentation;"Vie quotidienne";-13,69;;00012345678;BoursoBank;-21.76;Non
+"#;
+
+    /// Same rows, but with the `tags` column BoursoBank inserts at index 3.
+    pub const TRANSACTIONS_CSV_WITH_TAGS: &str = r#"dateOp;dateVal;label;tags;suggestedLabel;category;categoryParent;amount;comment;accountNum;accountLabel;accountbalance;mark
+2026-07-24;2026-07-24;"VIR INST REMBOURSEMENT";;"Vir Inst Remboursement";"Virements reçus";"Virements reçus";21,81;;00012345678;BoursoBank;0.05;Non
+2026-07-22;2026-07-22;"CARTE 20/07/26 CLOUDFLARE CB*1234";vacances;Cloudflare;"Non catégorisé";"Non catégorisé";-3,94;;00012345678;BoursoBank;-21.76;Non
+2026-07-22;2026-07-22;"CARTE 21/07/26 LIDL 1234 CB*1234";;Lidl;Alimentation;"Vie quotidienne";-13,69;;00012345678;BoursoBank;-21.76;Non
 "#;
 }
