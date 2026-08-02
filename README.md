@@ -123,49 +123,7 @@ Specify a trading account:
 ```
 *Tip: You can get the accounts ids from the [`accounts` command](#get-your-accounts)*
 
-By default the output is JSON:
-```
-[
-    {
-        "id": "account",
-        "account": {
-            "name": "PEA DOE",
-            "currency": "EUR",
-            "typeCategory": "TRADING",
-            "activationDate": "2021-03-15",
-            "balance": { "value": 143088.89, "decimals": 2, "currency": "EUR" },
-            "cash": { "value": 1543.2, "decimals": 2, "currency": "EUR" },
-            "valuation": { "value": 141545.69, "decimals": 2, "currency": "EUR" },
-            "total": { "value": 143088.89, "decimals": 2, "currency": "EUR" },
-            "gainLoss": { "value": 12345.67, "decimals": 2, "currency": "EUR" },
-            "gainLossPercent": { "value": 9.45, "decimals": 2, "currency": "EUR" },
-            "liquidationAmount": { "value": 143088.89, "decimals": 2, "currency": "EUR" },
-            "contribution": 130000
-        },
-        "positions": null
-    },
-    {
-        "id": "positions",
-        "account": null,
-        "positions": [
-            {
-                "symbol": "1rTCW8",
-                "label": "AMUNDI ETF MSCI WORLD UCITS ETF",
-                "permalink": "1rTCW8-EUR",
-                "quantity": { "value": 12, "decimals": 0 },
-                "buyingPrice": { "value": 487.12, "decimals": 2 },
-                "amount": { "value": 5845.44, "decimals": 2 },
-                "last": { "value": 495.1, "decimals": 2 },
-                "var": { "value": 1.64, "decimals": 2 },
-                "gainLoss": { "value": 95.76, "decimals": 2 },
-                "gainLossPercent": { "value": 1.64, "decimals": 2 },
-                "lastMovementDate": "2026-07-28"
-            }
-        ]
-    }
-]
-```
-*(example values above)*
+By default the output is JSON.
 
 You can also get a human readable table with `--format table`:
 ```
