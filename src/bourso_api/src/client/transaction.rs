@@ -4,6 +4,7 @@ use crate::constants::BASE_URL;
 use super::BoursoWebClient;
 
 use anyhow::{Context, Result};
+use regex::Regex;
 use tracing::debug;
 
 impl BoursoWebClient {
@@ -27,19 +28,38 @@ impl BoursoWebClient {
         from_date: &str,
         to_date: &str,
     ) -> Result<Vec<Transaction>> {
+        // The export is a CSRF-protected form POST: first fetch the form page to
+        // read its per-session `_token`, then POST the export request.
+        let form_page = self
+            .client
+            .get(format!("{BASE_URL}/mon-budget/generate"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let token = Regex::new(r#"movementSearch\[_token\][^>]*?value="(?P<token>[^"]*)""#)
+            .expect("valid regex")
+            .captures(&form_page)
+            .and_then(|c| c.name("token"))
+            .context("Could not find export form CSRF token")?
+            .as_str()
+            .to_string();
+
         let response = self
             .client
-            .get(format!("{BASE_URL}/budget/exporter-mouvements"))
-            .query(&[
+            .post(format!("{BASE_URL}/budget/exporter-mouvements"))
+            .form(&[
                 ("movementSearch[selectedAccounts][]", account_id),
                 ("movementSearch[fromDate]", from_date),
                 ("movementSearch[toDate]", to_date),
                 ("movementSearch[format]", "CSV"),
-                ("movementSearch[filteredBy]", "filteredByCategory"),
-                ("movementSearch[catergory]", ""),
+                ("movementSearch[filtredBy]", "filtredByCategory"),
+                ("movementSearch[category]", ""),
                 ("movementSearch[operationTypes]", ""),
                 ("movementSearch[myBudgetPage]", "1"),
-                ("movementSearch[submit]", ""),
+                ("movementSearch[_token]", &token),
             ])
             .headers(self.get_headers())
             .send()
