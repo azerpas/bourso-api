@@ -322,7 +322,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
                             println!("  Positions:");
                             for p in positions {
                                 println!(
-                                    "  - {} ({}): qty={} PRU={} amount={} last={} GL={} ({}%)",
+                                    "  - {} ({}): qty={} buy_price={} amount={} last={} gain_loss={} ({}%)",
                                     p.label,
                                     p.symbol,
                                     p.quantity.value,
