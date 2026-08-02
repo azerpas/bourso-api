@@ -164,6 +164,7 @@ version = "0.5.4"
 dependencies = [
  "anyhow",
  "bourso_api",
+ "chrono",
  "clap",
  "directories",
  "futures-util",
