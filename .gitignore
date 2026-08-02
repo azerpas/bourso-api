@@ -4,3 +4,8 @@
 # Added by cargo
 
 /target
+
+# Nix
+result
+.direnv/
+.pre-commit-config.yaml
