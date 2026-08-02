@@ -9,8 +9,6 @@ use regex::Regex;
 use tracing::debug;
 
 lazy_static! {
-    /// CSRF token embedded in the movement-export form.
-    /// Matches: name="movementSearch[_token]" ... value="<token>"
     static ref EXPORT_TOKEN_REGEX: Regex =
         Regex::new(r#"movementSearch\[_token\]"[^>]*?value="(?P<token>[^"]+)""#)
             .expect("Failed to compile export token regex");
@@ -42,11 +40,6 @@ impl BoursoWebClient {
         from_date: &str,
         to_date: &str,
     ) -> Result<Vec<Transaction>> {
-        // Since 2026 the CSV export is a POST guarded by a per-session CSRF
-        // token: GET the export form first, scrape `movementSearch[_token]`,
-        // then POST the search. (The old GET-with-query flow now just 302s to
-        // the HTML form page, which silently yielded zero transactions for
-        // every account.)
         let token = self.get_export_token().await?;
 
         let form: Vec<(&str, &str)> = vec![
@@ -72,8 +65,7 @@ impl BoursoWebClient {
             .send()
             .await?;
 
-        // Follow redirects manually (the client uses Policy::none()); the CSV
-        // download usually arrives after one 302.
+        // Follow redirects manually (the client uses Policy::none())
         let response = if response.status() == 302 {
             let location = response
                 .headers()
