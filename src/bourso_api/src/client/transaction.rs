@@ -3,8 +3,21 @@ use crate::constants::BASE_URL;
 
 use super::BoursoWebClient;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use lazy_static::lazy_static;
+use regex::Regex;
 use tracing::debug;
+
+lazy_static! {
+    static ref EXPORT_TOKEN_REGEX: Regex =
+        Regex::new(r#"movementSearch\[_token\]"[^>]*?value="(?P<token>[^"]+)""#)
+            .expect("Failed to compile export token regex");
+}
+
+/// URL of the page hosting the movement-export form (source of the CSRF token).
+const EXPORT_FORM_URL: &str = "/mon-budget/generate";
+/// Endpoint the export form POSTs to.
+const EXPORT_SUBMIT_PATH: &str = "/budget/exporter-mouvements";
 
 impl BoursoWebClient {
     /// Get the transactions for an account over a date range.
@@ -27,21 +40,28 @@ impl BoursoWebClient {
         from_date: &str,
         to_date: &str,
     ) -> Result<Vec<Transaction>> {
+        let token = self.get_export_token().await?;
+
+        let form: Vec<(&str, &str)> = vec![
+            ("movementSearch[label]", ""),
+            ("movementSearch[selectedAccounts][]", account_id),
+            ("movementSearch[fromDate]", from_date),
+            ("movementSearch[toDate]", to_date),
+            ("movementSearch[format]", "CSV"),
+            ("movementSearch[filtredBy]", "filtredByCategory"),
+            ("movementSearch[category]", ""),
+            ("movementSearch[operationTypes]", ""),
+            ("movementSearch[myBudgetPage]", "1"),
+            ("movementSearch[operationType]", ""),
+            ("movementSearch[_token]", token.as_str()),
+            ("movementSearch[submit]", ""),
+        ];
+
         let response = self
             .client
-            .get(format!("{BASE_URL}/budget/exporter-mouvements"))
-            .query(&[
-                ("movementSearch[selectedAccounts][]", account_id),
-                ("movementSearch[fromDate]", from_date),
-                ("movementSearch[toDate]", to_date),
-                ("movementSearch[format]", "CSV"),
-                ("movementSearch[filteredBy]", "filteredByCategory"),
-                ("movementSearch[catergory]", ""),
-                ("movementSearch[operationTypes]", ""),
-                ("movementSearch[myBudgetPage]", "1"),
-                ("movementSearch[submit]", ""),
-            ])
+            .post(format!("{BASE_URL}{EXPORT_SUBMIT_PATH}"))
             .headers(self.get_headers())
+            .form(&form)
             .send()
             .await?;
 
@@ -67,24 +87,70 @@ impl BoursoWebClient {
             response
         };
 
-        debug!("Export response status: {}", response.status());
+        let status = response.status();
+        debug!("Export response status: {}", status);
 
         let res = response.bytes().await?;
         let content = String::from_utf8_lossy(&res);
         // Strip BOM if present
         let content = content.strip_prefix('\u{FEFF}').unwrap_or(&content);
 
-        // An HTML response means no transactions were found for the given period
+        // A non-empty export is CSV. A genuinely EMPTY period, though, bounces
+        // (302) back to the export FORM page (/mon-budget/generate), which is
+        // HTML and still carries the `movementSearch` form — that is the "no
+        // operations" signal and is legitimate (e.g. a savings account with no
+        // recent movement). Any other HTML (a login page, an error page: no
+        // export form) means the session/flow broke — and we must NOT report
+        // zero there, as silently returning an empty list has let callers
+        // overwrite good data with nothing.
         if content.starts_with("<!DOCTYPE") || content.starts_with("<html") {
-            debug!(
-                "No transactions found for account {} from {} to {}",
-                account_id, from_date, to_date
+            let has_export_form = content.contains(r#"name="movementSearch""#)
+                || content.contains("movementSearch[_token]");
+            if has_export_form {
+                debug!(
+                    "No transactions for account {} from {} to {} \
+                     (empty export bounced back to the form page)",
+                    account_id, from_date, to_date
+                );
+                return Ok(Vec::new());
+            }
+            bail!(
+                "Movement export for account {account_id} returned an HTML page \
+                 (status {status}) with no export form — the BoursoBank session \
+                 likely expired or the export flow changed. Refusing to report \
+                 zero transactions."
             );
-            return Ok(Vec::new());
         }
 
         extract_transactions(content)
     }
+
+    /// Fetch the export form page and scrape its `movementSearch[_token]` CSRF
+    /// token, required to POST the movement export.
+    #[cfg(not(tarpaulin_include))]
+    async fn get_export_token(&self) -> Result<String> {
+        let page = self
+            .client
+            .get(format!("{BASE_URL}{EXPORT_FORM_URL}"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+        extract_export_token(&page)
+    }
+}
+
+/// Extract the `movementSearch[_token]` CSRF token from the export form page.
+fn extract_export_token(page: &str) -> Result<String> {
+    EXPORT_TOKEN_REGEX
+        .captures(page)
+        .and_then(|c| c.name("token"))
+        .map(|m| m.as_str().to_string())
+        .context(
+            "Could not find movementSearch[_token] on the export form page — \
+             the export form layout may have changed or the session expired.",
+        )
 }
 
 /// Parse a French-formatted amount string to f64.
@@ -143,6 +209,24 @@ fn extract_transactions(content: &str) -> Result<Vec<Transaction>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_extract_export_token() {
+        let page = r#"<form name="movementSearch" method="post" action="/budget/exporter-mouvements">
+            <input type="hidden" name="movementSearch[myBudgetPage]" value="1" >
+            <input id="movementSearch__token" type="hidden" name="movementSearch[_token]" value="test-csrf-token-not-a-real-value.1234abcd.5678efgh" >
+            </form>"#;
+        let token = extract_export_token(page).unwrap();
+        assert_eq!(
+            token,
+            "test-csrf-token-not-a-real-value.1234abcd.5678efgh"
+        );
+    }
+
+    #[test]
+    fn test_extract_export_token_missing() {
+        assert!(extract_export_token("<html><body>no form here</body></html>").is_err());
+    }
 
     #[test]
     fn test_parse_amount() {
