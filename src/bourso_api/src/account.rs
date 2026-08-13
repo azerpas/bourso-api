@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 /// Type of account
@@ -11,7 +13,7 @@ pub enum AccountKind {
 }
 
 /// A bank account
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct Account {
     /// Account id as an hexadecimal string (32 characters)
     pub id: String,
@@ -23,6 +25,21 @@ pub struct Account {
     pub bank_name: String,
     /// The type of account
     pub kind: AccountKind,
+}
+
+impl fmt::Debug for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Account")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field(
+                "balance",
+                &format_args!("{:.2}", self.balance as f64 / 100.0),
+            )
+            .field("bank_name", &self.bank_name)
+            .field("kind", &self.kind)
+            .finish()
+    }
 }
 
 /// A bank transaction
