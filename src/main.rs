@@ -238,6 +238,16 @@ async fn main() -> Result<()> {
                 .value_parser(clap::value_parser!(String))
                 .required(false)
         )
+        .arg(
+            Arg::new("identity")
+                .long("identity")
+                .help(
+                    r#"The identity to use when the account grants access to several ones
+    (e.g. a personal and a professional one). Run any command without it to list them."#
+                )
+                .value_parser(clap::value_parser!(String))
+                .required(false)
+        )
         .get_matches();
 
     bourso_cli::parse_matches(matches).await?;
