@@ -51,6 +51,28 @@ async fn main() -> Result<()> {
                 )
         )
         .subcommand(
+            Command::new("summary")
+                .about("Fetch balances and transactions for every account as JSON")
+                .arg(
+                    Arg::new("start-date")
+                        .long("start-date")
+                        .required(true)
+                        .help("Start date (DD/MM/YYYY)")
+                )
+                .arg(
+                    Arg::new("end-date")
+                        .long("end-date")
+                        .required(true)
+                        .help("End date (DD/MM/YYYY)")
+                )
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .help("Output file path (defaults to stdout)")
+                )
+        )
+        .subcommand(
             Command::new("config")
                 .about("Configure BoursoBank/Boursorama CLI")
                 .arg(
