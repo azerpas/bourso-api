@@ -1,6 +1,6 @@
 [package]
 name       = "bourso-cli"
-version    = "0.6.0"
+version    = "0.6.1"
 edition    = "2021"
 repository = "https://github.com/azerpas/bourso-api"
 
@@ -17,6 +17,7 @@ serde              = { version = "1.0.189", features = ["derive"] }
 serde_json         = { version = "1.0.107" }
 tracing            = { version = "0.1.41" }
 tracing-subscriber = { version = "0.3.20", features = ["fmt", "env-filter", "json"] }
+tracing-appender   = { version = "0.2.5" }
 futures-util       = { version = "0.3.31" }
 qrcode             = { version = "0.14.1" }
 
