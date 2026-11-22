@@ -3,6 +3,34 @@ use directories::UserDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::prelude::*;
+use std::path::PathBuf;
+
+/// Number of daily log files kept in `~/.bourso`
+const MAX_LOG_FILES: usize = 7;
+
+/// Return `~/.bourso`, creating it if needed and restricting it to the current user.
+/// It holds the settings file and the logs.
+#[cfg(not(tarpaulin_include))]
+fn bourso_dir() -> Result<PathBuf> {
+    let user_dirs = UserDirs::new().context("Failed to get user directories")?;
+    let path = user_dirs.home_dir().join(".bourso");
+    fs::create_dir_all(&path)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Also applied to an existing directory, to tighten installs created as 0755.
+        if let Err(e) = fs::set_permissions(&path, fs::Permissions::from_mode(0o700)) {
+            eprintln!(
+                "Warning: could not restrict permissions on {}: {}",
+                path.display(),
+                e
+            );
+        }
+    }
+
+    Ok(path)
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
@@ -65,12 +93,7 @@ pub fn get_settings() -> Result<Settings> {
 /// Save the settings to the settings file, if it doesn't exist, create it
 #[cfg(not(tarpaulin_include))]
 pub fn save_settings(settings: &Settings) -> Result<()> {
-    let user_dirs = UserDirs::new().context("Failed to get user directories")?;
-    let mut path = user_dirs.home_dir().to_path_buf();
-    // Create the .bourso directory if it doesn't exist
-    path = path.join(".bourso");
-    fs::create_dir_all(&path)?;
-    path = path.join("settings.json");
+    let path = bourso_dir()?.join("settings.json");
     let mut file = fs::File::create(&path).context("Failed to create settings file")?;
     let json = serde_json::to_string_pretty(settings).context("Failed to serialize settings")?;
     file.write_all(json.as_bytes())
@@ -79,19 +102,12 @@ pub fn save_settings(settings: &Settings) -> Result<()> {
 }
 
 pub fn init_logger() -> Result<()> {
+    use std::io;
     use std::io::IsTerminal;
-    use std::{fs, io};
-    use tracing_subscriber::filter::LevelFilter;
+    use tracing_appender::rolling::{RollingFileAppender, Rotation};
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
-    // Create ~/.bourso/bourso.log if it doesn't exist
-    let user_dirs = UserDirs::new().context("Failed to get user directories")?;
-    let mut path = user_dirs.home_dir().to_path_buf();
-    path.push(".bourso");
-    fs::create_dir_all(&path)?;
-    path.push("bourso.log");
 
     // Pretty console (stderr), filtered by RUST_LOG
     let console_layer = fmt::layer()
@@ -111,21 +127,26 @@ pub fn init_logger() -> Result<()> {
         })
         .with_filter(env_filter.clone());
 
-    // JSON file (capture everything)
-    let log_path = path.clone();
+    // JSON file rotated daily: ~/.bourso/bourso.YYYY-MM-DD.log, keeping the last MAX_LOG_FILES.
+    // Pruning matches any regular file named `bourso*log`, so the pre-rotation
+    // `bourso.log` is removed too once enough daily files exist.
+    let file_appender = RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_prefix("bourso")
+        .filename_suffix("log")
+        .max_log_files(MAX_LOG_FILES)
+        .build(bourso_dir()?)
+        .context("Failed to create the log file in ~/.bourso")?;
+
+    // Capture everything except cookie_store, which logs every Set-Cookie
+    // with its value
     let json_layer = fmt::layer()
-        .with_writer(move || {
-            fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&log_path)
-                .expect("open ~/.bourso/bourso.log")
-        })
+        .with_writer(file_appender)
         .json()
         .with_target(true)
         .with_level(true)
         .flatten_event(true)
-        .with_filter(LevelFilter::TRACE);
+        .with_filter(EnvFilter::new("trace,cookie_store=off"));
 
     tracing_subscriber::registry()
         .with(console_layer)
