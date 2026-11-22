@@ -27,8 +27,10 @@ impl BoursoWebClient {
             period
         );
 
+        // Without `X-Requested-With`, the endpoint answers `410 Gone` with an empty `[]` body.
         let response = self.client.get(&url)
             .header("Content-Type", "application/json;charset=UTF-8")
+            .header("X-Requested-With", "XMLHttpRequest")
             .send()
             .await?;
 
