@@ -117,6 +117,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         }
         // These matches require authentication
         Some(("accounts", _))
+        | Some(("summary", _))
         | Some(("export", _))
         | Some(("balance", _))
         | Some(("trade", _))
@@ -254,6 +255,36 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
             info!("Found {} accounts", accounts.len());
             println!("{:#?}", accounts);
+        }
+
+        Some(("summary", sm)) => {
+            let start = sm.get_one::<String>("start-date").unwrap();
+            let end = sm.get_one::<String>("end-date").unwrap();
+            let out = sm.get_one::<String>("output");
+
+            let all = web_client.get_accounts(None).await?;
+            let mut result = Vec::new();
+            for acc in &all {
+                let txs = match web_client.get_transactions(&acc.id, start, end).await {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        warn!("transactions unavailable for {} ({}): {}", acc.name, acc.id, e);
+                        None
+                    }
+                };
+                result.push(serde_json::json!({
+                    "account": acc,
+                    "transactions": txs,
+                }));
+            }
+            let json = serde_json::to_string_pretty(&result)?;
+            match out {
+                Some(path) => {
+                    std::fs::write(path, &json)?;
+                    info!("Summary written to {}", path);
+                }
+                None => println!("{}", json),
+            }
         }
 
         Some(("export", export_matches)) => {
