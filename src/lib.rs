@@ -43,6 +43,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
             save_settings(&Settings {
                 customer_id: Some(customer_id.to_string()),
                 password: None,
+                identity: None,
             })?;
             info!("Configuration saved ✅");
             return Ok(());
@@ -148,6 +149,13 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
     };
 
     let mut web_client: BoursoWebClient = get_client();
+    // `--identity` prime sur le fichier de configuration.
+    web_client.set_identity(
+        matches
+            .get_one::<String>("identity")
+            .cloned()
+            .or(settings.identity),
+    );
     web_client.init_session().await?;
     match web_client.login(&customer_id, &password).await {
         Ok(_) => {

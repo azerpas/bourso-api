@@ -41,6 +41,12 @@ lazy_static::lazy_static! {
     /// Matches: userContact&quot;:&quot;<contact>&quot;
     static ref USER_CONTACT_REGEX: Regex = Regex::new(r"(?m)userContact&quot;:&quot;(?P<contact_user>.*?)&quot;")
         .expect("Failed to compile user contact regex");
+
+    /// Regex to extract the identities from the identity picker.
+    /// Matches: <a href="/connexion/changer-identite/<id>" ...>[label]</a>
+    static ref IDENTITY_REGEX: Regex = Regex::new(
+        r#"(?s)<a[^>]*href="/connexion/changer-identite/(?P<id>[0-9a-f]+)"[^>]*>(?P<body>.*?)</a>"#
+    ).expect("Failed to compile identity regex");
 }
 
 pub struct BoursoWebClient {
@@ -62,6 +68,8 @@ pub struct BoursoWebClient {
     password: String,
     /// Cookie store used to store cookies between each request made by the client to the Bourso website.
     cookie_store: Arc<CookieStoreMutex>,
+    /// Identity to switch to when the account grants access to several ones.
+    identity: Option<String>,
     /// Bourso Web current configuration
     pub config: Config,
 }
@@ -120,8 +128,15 @@ impl BoursoWebClient {
             customer_id: String::new(),
             token: String::new(),
             password: String::new(),
+            identity: None,
             config: Config::default(),
         }
+    }
+
+    /// Select which identity to use when the account grants access to several
+    /// ones. Must be set before `login`.
+    pub fn set_identity(&mut self, identity: Option<String>) {
+        self.identity = identity;
     }
 
     /// Get the headers needed to make requests to the Bourso website.
@@ -279,7 +294,7 @@ impl BoursoWebClient {
             bail!("Could not login to Bourso website, status code: {}", status);
         }
 
-        let res = self
+        let mut res = self
             .client
             .get(format!("{BASE_URL}/"))
             .headers(self.get_headers())
@@ -287,6 +302,15 @@ impl BoursoWebClient {
             .await?
             .text()
             .await?;
+
+        // An account may grant access to several identities (e.g. a personal
+        // and a professional one). In that case the website answers with a
+        // redirection to the identity picker instead of the home page, and no
+        // logout link is present yet — which used to be reported as invalid
+        // credentials even though the login had succeeded.
+        if res.contains("lister-identites") {
+            res = self.select_identity().await?;
+        }
 
         if res.contains(r#"href="/se-deconnecter""#) {
             // Update the config with user hash
@@ -305,6 +329,51 @@ impl BoursoWebClient {
         }
 
         Ok(())
+    }
+
+    /// Pick an identity when the account grants access to several of them, and
+    /// return the resulting home page.
+    ///
+    /// The picker lists each identity as a `/connexion/changer-identite/<id>`
+    /// link; following it switches the session to that identity.
+    async fn select_identity(&mut self) -> Result<String> {
+        let page = self
+            .client
+            .get(format!("{BASE_URL}/connexion/lister-identites"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let identities = extract_identities(&page);
+        debug!("{} identity(ies) offered", identities.len());
+
+        let chosen = match &self.identity {
+            Some(wanted) => match identities.iter().find(|(id, _)| id == wanted) {
+                Some((id, _)) => id.clone(),
+                None => bail!(ClientError::UnknownIdentity(wanted.clone())),
+            },
+            // Staying silent on an arbitrary pick would mean reporting figures
+            // for the wrong identity, so only an unambiguous case is automatic.
+            None if identities.len() == 1 => identities[0].0.clone(),
+            None => bail!(ClientError::IdentitySelectionRequired(identities)),
+        };
+
+        self.client
+            .get(format!("{BASE_URL}/connexion/changer-identite/{chosen}"))
+            .headers(self.get_headers())
+            .send()
+            .await?;
+
+        Ok(self
+            .client
+            .get(format!("{BASE_URL}/"))
+            .headers(self.get_headers())
+            .send()
+            .await?
+            .text()
+            .await?)
     }
 
     /// Request the MFA code to be sent to the user.
@@ -548,6 +617,54 @@ fn extract_brs_mit_cookie(res: &str) -> Result<String> {
     Ok(brs_mit_cookie)
 }
 
+/// Extract the identities offered by the identity picker.
+///
+/// Each one appears as a `/connexion/changer-identite/<id>` link whose text
+/// holds the label shown to the user.
+///
+/// # Arguments
+///
+/// * `res` - The `/connexion/lister-identites` page as a string.
+///
+/// # Returns
+///
+/// The identities as `(id, label)` pairs, in the order the page lists them.
+fn extract_identities(res: &str) -> Vec<(String, String)> {
+    let mut identities: Vec<(String, String)> = Vec::new();
+
+    for capture in IDENTITY_REGEX.captures_iter(res) {
+        let id = match capture.name("id") {
+            Some(id) => id.as_str().to_string(),
+            None => continue,
+        };
+        if identities.iter().any(|(known, _)| *known == id) {
+            continue;
+        }
+
+        // The label sits in the link body, wrapped in markup: drop the tags,
+        // collapse whitespace, and keep what a human would read.
+        let label = capture
+            .name("body")
+            .map(|body| {
+                let text = body
+                    .as_str()
+                    .split('<')
+                    .map(|fragment| match fragment.split_once('>') {
+                        Some((_, tail)) => tail,
+                        None => fragment,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                text.split_whitespace().collect::<Vec<_>>().join(" ")
+            })
+            .unwrap_or_default();
+
+        identities.push((id, label));
+    }
+
+    identities
+}
+
 fn extract_token(res: &str) -> Result<String> {
     let token = TOKEN_REGEX
         .captures(&res)
@@ -634,5 +751,30 @@ mod tests {
         let res = r#"data-backspace><i class="form-row-circles-password__backspace-icon / c-icon c-icon--backspace u-block"></i></button></div></div></div><input  id="form_ajx" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[ajx]" value="1" ><input  autocomplete="off" aria-label="Renseignez votre mot de passe en sélectionnant les 8 chiffres sur le clavier virtuel accessible ci-après par votre liseuse." data-matrix-password="1" id="form_password" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[password]" value="" ><input  data-password-ack="1" id="form_passwordAck" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[passwordAck]" value="{&quot;js&quot;:false}" ><input  data-authentication-factor-webauthn-detection="data-authentication-factor-webauthn-detection" id="form_platformAuthenticatorAvailable" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[platformAuthenticatorAvailable]" value="" ><input  data-matrix-random-challenge="1" id="form_matrixRandomChallenge" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[matrixRandomChallenge]" value="" ><input  id="form__token" type="hidden" class="c-field__input" data-brs-text-input="data-brs-text-input" name="form[_token]" value="45ed28b1-76ff-46a2-9202-0ee01928e6bb" ><hx:include id="hinclude__36d8139868f4bef54611a886784a3cbb"  src="/connexion/clavier-virtuel"><div data-matrix-placeholder class="sasmap sasmap--placeholder"><div class="bouncy-loader "><div class="bouncy-loader__balls"><div class="bouncy-loader__ball bouncy-loader__ball--left"></div><div class="bouncy-loader__ball bouncy-loader__ball--center"></div><div class="bouncy-loader__ball bouncy-loader__ball--right"></div></div></div></div></hx:include><div class="narrow-modal-window__input-container"><div class="u-text-center  o-vertical-interval-bottom "><div class="o-grid"><div class="o-grid__item"><button class="c-button--fancy c-button c-button--fancy u-1/1 c-button--primary"        type="submit"        data-login-submit       ><span class="c-button__text">Je me connecte</span></button></div><div class="o-grid__item  u-hidden" data-login-go-to-webauthn-wrapper><button class="c-button--fancy c-button c-button--fancy u-1/1 c-button--secondary"        type="button"        data-login-go-to-webauthn       ><span class="c-button__text">Clé de sécurité</span></button></div></div></div><div class="u-text-center"><a class="c-button--fancy c-button c-button--fancy u-1/1 c-button--tertiary c-button--link"        href="/connexion/mot-de-passe/retrouver"        data-pjax       ><span class="c-button__text">Mot de passe oublié ?</span></a></div></div><div class="narrow-modal-window__back-link"><button class="c-button--nav-back c-button u-1/1@xs-max c-button--text"        type="button"        data-login-back-to-login data-login-change-user-action="/connexion/oublier-identifiant"       ><span class="c-button__text"><div class="o-flex o-flex--align-center"><div class="c-button__icon"><svg xmlns="http://www.w3.org/2000/svg" width="7.8" height="14" viewBox="0 0 2.064 3.704"><path d="M1.712 3.644L.082 2.018a.212.212 0 0 1-.022-.02.206.206 0 0 1-.06-.146.206.206 0 0 1 .06-.147.212.212 0 0 1 .022-.019L1.712.06a.206.206 0 0 1 .291 0 .206.206 0 0 1 0 .291L.5 1.852l1.504 1.501a.206.206 0 0 1 0 .291.205.205 0 0 1-.146.06.205.205 0 0 1-.145-.06z"/></svg></div><div class="c-button__content">Mon identifiant</div></div></span></button></div></div><footer class="narrow-modal-footer narrow-modal-footer--mobile" data-transition-view-footer><div class="narrow-modal-footer__item narrow-modal-footer__item--mobile"><a href="" class="c-link c-link--icon c-link--pull-up c-link--subtle""#;
         let token = extract_token(&res).unwrap();
         assert_eq!(token, "45ed28b1-76ff-46a2-9202-0ee01928e6bb");
+    }
+
+    #[test]
+    fn test_extract_identities() {
+        let res = r#"<ul class="c-menu-list"><li class="c-menu-list__item"><a href="/connexion/changer-identite/aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa7777bbbb8888" class="c-menu-list__link" data-switch-account data-target-selector="[data-identities]"><span class="c-menu-list__label">JOHN DOE</span></a></li><li class="c-menu-list__item"><a href="/connexion/changer-identite/1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777aaaa8888bbbb" class="c-menu-list__link" data-switch-account data-target-selector="[data-identities]"><span class="c-menu-list__label">EI DOE JOHN</span></a></li></ul><a class="c-button" href="/se-deconnecter">Se déconnecter</a>"#;
+        let identities = extract_identities(res);
+
+        assert_eq!(
+            identities,
+            vec![
+                (
+                    "aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666aaaa7777bbbb8888".to_string(),
+                    "JOHN DOE".to_string()
+                ),
+                (
+                    "1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777aaaa8888bbbb".to_string(),
+                    "EI DOE JOHN".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_identities_ignores_other_links() {
+        assert!(extract_identities(r#"<a href="/se-deconnecter">Se déconnecter</a>"#).is_empty());
     }
 }

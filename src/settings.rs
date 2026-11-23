@@ -38,6 +38,9 @@ pub struct Settings {
     pub customer_id: Option<String>,
     #[serde(rename = "password")]
     pub password: Option<String>,
+    /// Identity to use when the account grants access to several ones.
+    #[serde(rename = "identity", default)]
+    pub identity: Option<String>,
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -73,10 +76,12 @@ pub fn get_settings() -> Result<Settings> {
             save_settings(&Settings {
                 customer_id: None,
                 password: None,
+                identity: None,
             })?;
             return Ok(Settings {
                 customer_id: None,
                 password: None,
+                identity: None,
             });
         }
     };
