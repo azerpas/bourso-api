@@ -267,6 +267,16 @@ impl BoursoWebClient {
             .send()
             .await?;
 
+        // Bourso now redirects the password POST to /securisation when strong
+        // auth (webtoapp MFA) is required. Detect it from the redirect target
+        // so the caller can drive the MFA flow.
+        let location = res
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+
         if res.status() != 302 {
             let status = res.status();
             let text = res.text().await?;
@@ -279,32 +289,217 @@ impl BoursoWebClient {
             bail!("Could not login to Bourso website, status code: {}", status);
         }
 
-        let res = self
-            .client
-            .get(format!("{BASE_URL}/"))
-            .headers(self.get_headers())
-            .send()
-            .await?
-            .text()
-            .await?;
+        // Follow the post-login redirect chain (Bourso chains through
+        // /securisation and /connexion/lister-identites). Handle identity
+        // selection, then check whether we ended up authenticated.
+        let landing = self.follow_get(&format!("{BASE_URL}/")).await?;
+        let landing_url = landing.url().to_string();
+        let mut body = landing.text().await?;
 
-        if res.contains(r#"href="/se-deconnecter""#) {
+        if landing_url.contains("lister-identites") || body.contains("changer-identite/") {
+            let re = Regex::new(r#"changer-identite/([a-f0-9]{64})"#)?;
+            let hashes: Vec<String> = re
+                .captures_iter(&body)
+                .map(|c| c.get(1).unwrap().as_str().to_string())
+                .collect();
+            info!(
+                "Identity selection required ({} identit(y/ies) found)",
+                hashes.len()
+            );
+            let idx: usize = std::env::var("BOURSO_IDENTITY")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0);
+            info!(
+                "Using identity index {} of {} (set BOURSO_IDENTITY to choose)",
+                idx,
+                hashes.len()
+            );
+            if let Some(hash) = hashes.get(idx).or_else(|| hashes.first()) {
+                debug!("Switching to identity {}", hash);
+                let _ = self
+                    .follow_get(&format!("{BASE_URL}/connexion/changer-identite/{hash}"))
+                    .await?;
+                let landing2 = self.follow_get(&format!("{BASE_URL}/")).await?;
+                body = landing2.text().await?;
+            }
+        }
+
+        if body.contains(r#"href="/se-deconnecter""#) {
             // Update the config with user hash
-            self.config = extract_brs_config(&res)?;
+            self.config = extract_brs_config(&body)?;
             info!(
                 "🔓 You are now logged in with user: {}",
                 self.config.user_hash.as_ref().unwrap()
             );
-        } else {
-            if res.contains("/securisation") {
-                bail!(ClientError::MfaRequired)
-            }
-            debug!("{}", res);
-
-            bail!(ClientError::InvalidCredentials)
+            return Ok(());
         }
 
+        if location.contains("/securisation") || body.contains("/securisation") {
+            // The strong-auth chain can interpose a fraud-pedagogy consent page
+            // (form `ConsentType`). Accepting it may complete the login outright
+            // (no OTP); otherwise a real MFA challenge follows and the caller
+            // drives it. Resolve the consent here first.
+            if self.try_login_via_consent().await.unwrap_or(false) {
+                return Ok(());
+            }
+            bail!(ClientError::MfaRequired);
+        }
+
+        debug!("{}", body);
+        bail!(ClientError::InvalidCredentials)
+    }
+
+    /// GET a URL following redirects manually (the client is built with
+    /// `redirect::Policy::none()`), resolving relative Location headers.
+    #[cfg(not(tarpaulin_include))]
+    async fn follow_get(&self, url: &str) -> Result<reqwest::Response> {
+        let mut current = url.to_string();
+        for _ in 0..10 {
+            let res = self
+                .client
+                .get(&current)
+                .headers(self.get_headers())
+                .send()
+                .await?;
+            if res.status().is_redirection() {
+                let loc = res
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_string());
+                match loc {
+                    Some(l) if l.starts_with("http") => {
+                        current = l;
+                        continue;
+                    }
+                    Some(l) => {
+                        current = format!("{BASE_URL}{l}");
+                        continue;
+                    }
+                    None => return Ok(res),
+                }
+            }
+            return Ok(res);
+        }
+        bail!("Too many redirects while fetching {}", url)
+    }
+
+    /// GET a URL, transparently accepting Bourso's "fraud pedagogy" consent
+    /// blocking page when it is interposed.
+    ///
+    /// Bourso intermittently serves a consent page (an HTML form named
+    /// `ConsentType`) *before* the strong-auth MFA challenge. That page must be
+    /// validated, otherwise the MFA page never appears and `request_mfa` fails
+    /// with "MFA type not found". Returns the final `(url, body)`.
+    #[cfg(not(tarpaulin_include))]
+    async fn fetch_with_consent(&self, url: &str) -> Result<(String, String)> {
+        for _ in 0..4 {
+            let resp = self.follow_get(url).await?;
+            let final_url = resp.url().to_string();
+            let body = resp.text().await?;
+            if body.contains("name=\"ConsentType\"") {
+                info!("Fraud-pedagogy consent page detected; accepting it");
+                self.accept_fraud_consent(&final_url, &body).await?;
+                continue;
+            }
+            return Ok((final_url, body));
+        }
+        bail!("Consent blocking page kept reappearing while fetching {}", url)
+    }
+
+    /// Validate the fraud-pedagogy consent blocking page (form `ConsentType`).
+    ///
+    /// Ticks `ConsentType[consent]`, replays the form's hidden inputs and
+    /// submits `ConsentType[validate]` (the "Valider" button), exactly like a
+    /// browser would. The form has no `action`, so it posts to its own URL.
+    #[cfg(not(tarpaulin_include))]
+    async fn accept_fraud_consent(&self, url: &str, body: &str) -> Result<()> {
+        let form_re = Regex::new(r#"(?is)<form[^>]*name="ConsentType".*?</form>"#)?;
+        let form = form_re.find(body).map(|m| m.as_str()).unwrap_or(body);
+        let input_re = Regex::new(r#"(?is)<input\b[^>]*>"#)?;
+        let name_re = Regex::new(r#"(?i)\bname="([^"]*)""#)?;
+        let value_re = Regex::new(r#"(?i)\bvalue="([^"]*)""#)?;
+
+        let mut fields: Vec<(String, String)> = Vec::new();
+        for tag in input_re.find_iter(form).map(|m| m.as_str()) {
+            if !tag.to_ascii_lowercase().contains("type=\"hidden\"") {
+                continue;
+            }
+            if let (Some(n), Some(v)) = (name_re.captures(tag), value_re.captures(tag)) {
+                fields.push((n[1].to_string(), v[1].to_string()));
+            }
+        }
+        fields.push(("ConsentType[consent]".to_string(), "1".to_string()));
+        fields.push(("ConsentType[validate]".to_string(), String::new()));
+
+        let res = self
+            .client
+            .post(url)
+            .form(&fields)
+            .header("Host", "clients.boursobank.com")
+            .header(
+                "accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
+            .header("origin", "https://clients.boursobank.com")
+            .header("referer", url)
+            .header("sec-fetch-site", "same-origin")
+            .header("sec-fetch-mode", "navigate")
+            .header("sec-fetch-dest", "document")
+            .header("accept-language", "fr-FR,fr;q=0.9")
+            .headers(self.get_headers())
+            .send()
+            .await?;
+
+        debug!("Fraud-pedagogy consent submitted -> {}", res.status());
         Ok(())
+    }
+
+    /// Resolve the strong-auth chain and return whether the session ended up
+    /// authenticated (fraud-pedagogy consent accepted, no OTP required).
+    ///
+    /// Follows `/securisation` (handling the identity picker) then
+    /// `/securisation/validation`, accepting the consent page if present, and
+    /// finally checks the home page for the authenticated marker.
+    #[cfg(not(tarpaulin_include))]
+    async fn try_login_via_consent(&mut self) -> Result<bool> {
+        let (landing_url, landing_body) =
+            self.fetch_with_consent(&format!("{BASE_URL}/securisation")).await?;
+
+        if landing_url.contains("lister-identites") || landing_body.contains("changer-identite/") {
+            let re = Regex::new(r#"changer-identite/([a-f0-9]{64})"#)?;
+            let hashes: Vec<String> = re
+                .captures_iter(&landing_body)
+                .map(|c| c.get(1).unwrap().as_str().to_string())
+                .collect();
+            let idx: usize = std::env::var("BOURSO_IDENTITY")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0);
+            if let Some(hash) = hashes.get(idx).or_else(|| hashes.first()) {
+                debug!("Switching to identity {}", hash);
+                let _ = self
+                    .follow_get(&format!("{BASE_URL}/connexion/changer-identite/{hash}"))
+                    .await?;
+            }
+        }
+
+        let _ = self
+            .fetch_with_consent(&format!("{BASE_URL}/securisation/validation"))
+            .await?;
+
+        let check = self.follow_get(&format!("{BASE_URL}/")).await?;
+        let check_body = check.text().await?;
+        if check_body.contains(r#"href="/se-deconnecter""#) {
+            self.config = extract_brs_config(&check_body)?;
+            info!(
+                "🔓 You are now logged in with user: {}",
+                self.config.user_hash.as_ref().unwrap()
+            );
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     /// Request the MFA code to be sent to the user.
@@ -316,21 +511,35 @@ impl BoursoWebClient {
     /// * `mfa_type` - The type of MFA requested.
     #[cfg(not(tarpaulin_include))]
     pub async fn request_mfa(&mut self) -> Result<(String, String, String, MfaType)> {
-        let _ = self
-            .client
-            .get(format!("{BASE_URL}/securisation"))
-            .headers(self.get_headers())
-            .send()
-            .await?;
+        // Follow redirects for the strong-auth pages: Bourso chains
+        // /securisation -> /connexion/lister-identites (identity picker) then
+        // /securisation/validation -> cross-domain cookie hop -> MFA page.
+        let (landing_url, landing_body) =
+            self.fetch_with_consent(&format!("{BASE_URL}/securisation")).await?;
 
-        let res = self
-            .client
-            .get(format!("{BASE_URL}/securisation/validation"))
-            .headers(self.get_headers())
-            .send()
-            .await?;
+        if landing_url.contains("lister-identites") || landing_body.contains("changer-identite/") {
+            let re = Regex::new(r#"changer-identite/([a-f0-9]{64})"#)?;
+            let hashes: Vec<String> = re
+                .captures_iter(&landing_body)
+                .map(|c| c.get(1).unwrap().as_str().to_string())
+                .collect();
+            info!(
+                "Identity selection required ({} identit(y/ies) found)",
+                hashes.len()
+            );
+            if let Some(hash) = hashes.first() {
+                debug!("Switching to identity {}", hash);
+                let _ = self
+                    .follow_get(&format!("{BASE_URL}/connexion/changer-identite/{hash}"))
+                    .await?;
+            } else {
+                debug!("No identity hash found on lister-identites page");
+            }
+        }
 
-        let res = res.text().await?;
+        let (_validation_url, res) = self
+            .fetch_with_consent(&format!("{BASE_URL}/securisation/validation"))
+            .await?;
 
         let mfa_type = if res.contains("brs-otp-webtoapp") {
             // We're only supporting web to app MFA for now
